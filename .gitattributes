@@ -1,0 +1,5 @@
+* text=auto eol=lf
+*.ps1 text eol=crlf
+# normalizer.py dicek hash SHA-256-nya saat startup: jangan ubah line ending sama sekali.
+backend/app/ml/normalizer.py -text
+*.joblib binary

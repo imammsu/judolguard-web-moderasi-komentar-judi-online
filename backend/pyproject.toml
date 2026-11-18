@@ -1,0 +1,18 @@
+[project]
+name = "judolguard-backend"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+# normalizer.py disalin persis dari training; jangan diformat ulang (hash SHA-256 dicek saat startup).
+extend-exclude = ["app/ml/normalizer.py", "migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

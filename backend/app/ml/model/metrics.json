@@ -1,0 +1,253 @@
+{
+  "model_version": "v1.0-tfidf-linearsvc-calibrated",
+  "normalizer_sha256": "4a078a0c99576d727a8c6660334d91d5c9c209800bb21f896a02f8c7e1b8e214",
+  "model_name": "TF-IDF (word + char) + LinearSVC terkalibrasi, brand di-mask",
+  "params": {
+    "C": 5.0,
+    "class_weight": "balanced",
+    "calibration": "sigmoid, cv=5 (per kelompok)",
+    "resampling": "tidak dipakai (prevalensi alami)"
+  },
+  "input": "prepare(teks) dari normalizer.py (normalisasi + masking brand)",
+  "trained_at": "2026-11-18T07:35:50",
+  "sklearn_version": "1.6.1",
+  "dataset": {
+    "baris_mentah": 45592,
+    "baris_setelah_dedup": 32626,
+    "judol": 3117,
+    "normal": 29509,
+    "prevalensi_judol": 0.09553730153865016,
+    "jumlah_kelompok": 27362,
+    "threshold_kemiripan_kelompok": 0.7
+  },
+  "split": "StratifiedGroupKFold per kelompok kalimat mirip (7 fold: 5 train, 1 val, 1 test)",
+  "n_train": 22840,
+  "n_val": 5142,
+  "n_test": 4644,
+  "thresholds": {
+    "t_low": 0.2351288665553617,
+    "t_high": 0.5,
+    "p_target": 0.95,
+    "r_target": 0.97,
+    "prevalensi_bobot": 0.05
+  },
+  "test": {
+    "pr_auc": 0.9782839814997307,
+    "precision": 0.9813953488372092,
+    "recall": 0.9547511312217195,
+    "f1": 0.9678899082568807,
+    "confusion_matrix": [
+      [
+        4194,
+        8
+      ],
+      [
+        20,
+        422
+      ]
+    ]
+  },
+  "perbandingan_imbalance": [
+    {
+      "Metode": "tanpa penyeimbangan",
+      "baris latih": 22840,
+      "PR-AUC": 0.9078,
+      "Precision": 0.9477,
+      "Recall": 0.9539,
+      "F1": 0.9508,
+      "FP": 24,
+      "FN": 21
+    },
+    {
+      "Metode": "class_weight='balanced'",
+      "baris latih": 22840,
+      "PR-AUC": 0.9077,
+      "Precision": 0.9477,
+      "Recall": 0.9539,
+      "F1": 0.9508,
+      "FP": 24,
+      "FN": 21
+    },
+    {
+      "Metode": "undersample normal 1:1",
+      "baris latih": 4438,
+      "PR-AUC": 0.9048,
+      "Precision": 0.9228,
+      "Recall": 0.9693,
+      "F1": 0.9455,
+      "FP": 37,
+      "FN": 14
+    },
+    {
+      "Metode": "undersample normal 3:1",
+      "baris latih": 8876,
+      "PR-AUC": 0.9047,
+      "Precision": 0.9419,
+      "Recall": 0.9605,
+      "F1": 0.9511,
+      "FP": 27,
+      "FN": 18
+    },
+    {
+      "Metode": "SMOTE judol -> 1:1",
+      "baris latih": 41242,
+      "PR-AUC": 0.9076,
+      "Precision": 0.9477,
+      "Recall": 0.9539,
+      "F1": 0.9508,
+      "FP": 24,
+      "FN": 21
+    }
+  ],
+  "ablasi_masking_brand": [
+    {
+      "Teks masukan": "Normalisasi saja (brand utuh)",
+      "PR-AUC": 0.9907,
+      "Precision": 0.9883,
+      "Recall": 0.9525,
+      "F1": 0.97
+    },
+    {
+      "Teks masukan": "Normalisasi + brand di-mask",
+      "PR-AUC": 0.9806,
+      "Precision": 0.9768,
+      "Recall": 0.9525,
+      "F1": 0.9645
+    }
+  ],
+  "leave_brand_out": {
+    "tanpa_mask": [
+      {
+        "Fold": 1,
+        "Baris uji": 6526,
+        "Judol uji": 292,
+        "Brand uji": 15,
+        "Train dibuang": 67,
+        "PR-AUC": 0.926,
+        "Precision": 0.9627,
+        "Recall": 0.7945,
+        "F1": 0.8705
+      },
+      {
+        "Fold": 2,
+        "Baris uji": 6525,
+        "Judol uji": 815,
+        "Brand uji": 15,
+        "Train dibuang": 1303,
+        "PR-AUC": 0.973,
+        "Precision": 0.9884,
+        "Recall": 0.6294,
+        "F1": 0.7691
+      },
+      {
+        "Fold": 3,
+        "Baris uji": 6525,
+        "Judol uji": 525,
+        "Brand uji": 17,
+        "Train dibuang": 965,
+        "PR-AUC": 0.9789,
+        "Precision": 0.9845,
+        "Recall": 0.8457,
+        "F1": 0.9098
+      },
+      {
+        "Fold": 4,
+        "Baris uji": 6525,
+        "Judol uji": 756,
+        "Brand uji": 17,
+        "Train dibuang": 1363,
+        "PR-AUC": 0.9848,
+        "Precision": 0.9949,
+        "Recall": 0.7712,
+        "F1": 0.8689
+      },
+      {
+        "Fold": 5,
+        "Baris uji": 6525,
+        "Judol uji": 729,
+        "Brand uji": 18,
+        "Train dibuang": 1052,
+        "PR-AUC": 0.9828,
+        "Precision": 0.995,
+        "Recall": 0.8272,
+        "F1": 0.9034
+      }
+    ],
+    "di_mask": [
+      {
+        "Fold": 1,
+        "Baris uji": 6526,
+        "Judol uji": 292,
+        "Brand uji": 15,
+        "Train dibuang": 67,
+        "PR-AUC": 0.8475,
+        "Precision": 0.9116,
+        "Recall": 0.9178,
+        "F1": 0.9147
+      },
+      {
+        "Fold": 2,
+        "Baris uji": 6525,
+        "Judol uji": 815,
+        "Brand uji": 15,
+        "Train dibuang": 1303,
+        "PR-AUC": 0.9907,
+        "Precision": 0.9863,
+        "Recall": 0.9693,
+        "F1": 0.9777
+      },
+      {
+        "Fold": 3,
+        "Baris uji": 6525,
+        "Judol uji": 525,
+        "Brand uji": 17,
+        "Train dibuang": 965,
+        "PR-AUC": 0.9852,
+        "Precision": 0.9803,
+        "Recall": 0.9467,
+        "F1": 0.9632
+      },
+      {
+        "Fold": 4,
+        "Baris uji": 6525,
+        "Judol uji": 756,
+        "Brand uji": 17,
+        "Train dibuang": 1363,
+        "PR-AUC": 0.989,
+        "Precision": 0.9878,
+        "Recall": 0.9656,
+        "F1": 0.9766
+      },
+      {
+        "Fold": 5,
+        "Baris uji": 6525,
+        "Judol uji": 729,
+        "Brand uji": 18,
+        "Train dibuang": 1052,
+        "PR-AUC": 0.9921,
+        "Precision": 0.9846,
+        "Recall": 0.9643,
+        "F1": 0.9744
+      }
+    ]
+  },
+  "eksternal_live_chat_jogja": {
+    "n": 2543,
+    "n_judol": 30,
+    "pr_auc": 0.7189142996528686,
+    "threshold": 0.5,
+    "precision": 0.7575757575757576,
+    "recall": 0.8333333333333334,
+    "f1": 0.7936507936507936,
+    "confusion_matrix": [
+      [
+        2505,
+        8
+      ],
+      [
+        5,
+        25
+      ]
+    ]
+  }
+}
