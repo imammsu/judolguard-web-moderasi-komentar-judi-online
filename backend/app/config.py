@@ -41,7 +41,7 @@ def _normalize_db_url(url: str) -> str:
 
 class Config:
     APP_NAME = "JudolGuard API"
-    APP_VERSION = "0.1.0"
+    APP_VERSION = "0.2.0"
 
     ENV = _env("FLASK_ENV", "production")
     DEBUG = _env("FLASK_DEBUG", "0") == "1"
@@ -100,6 +100,9 @@ class TestingConfig(Config):
     TESTING = True
     ENV = "testing"
     SECRET_KEY = "test-secret-key"
+    FERNET_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+    GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
+    GOOGLE_CLIENT_SECRET = "GOCSPX-test-client-secret"
     SESSION_COOKIE_SECURE = False
     RATELIMIT_ENABLED = False
 

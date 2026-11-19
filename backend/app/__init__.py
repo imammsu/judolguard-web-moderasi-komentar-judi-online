@@ -12,6 +12,8 @@ from .errors import register_error_handlers
 from .extensions import db, limiter, migrate, oauth
 from .ml import get_registry
 from .responses import ok
+from .services.crypto import configure_fernet
+from .services.oauth_service import init_oauth
 
 _API_PREFIXES = ("api/", "auth/", "health")
 
@@ -28,6 +30,7 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     app = Flask(__name__, static_folder=None)
     app.config.from_object(config_object)
     finalize_config(app.config)
+    configure_fernet(app.config.get("FERNET_KEY"))
     _configure_logging(app.config.get("DEBUG", False))
 
     # Ekstensi
@@ -35,6 +38,7 @@ def create_app(config_object: type[Config] = Config) -> Flask:
     migrate.init_app(app, db)
     limiter.init_app(app)
     oauth.init_app(app)
+    init_oauth(app)
 
     # Model ML dimuat SEKALI per proses (PRD 8.7)
     get_registry().load()
