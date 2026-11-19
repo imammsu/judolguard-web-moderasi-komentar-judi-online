@@ -2,12 +2,28 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, current_app
+import logging
 
+from flask import Blueprint, current_app
+from sqlalchemy import text
+
+from ..extensions import db
 from ..ml import get_registry
 from ..responses import ok
 
+logger = logging.getLogger(__name__)
+
 bp = Blueprint("health", __name__)
+
+
+def _check_database_connection() -> tuple[bool, str | None]:
+    """Uji koneksi database nyata dengan SELECT 1."""
+    try:
+        db.session.execute(text("SELECT 1"))
+        return True, None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Pemeriksaan koneksi database gagal: %s", exc)
+        return False, f"{type(exc).__name__}"
 
 
 @bp.get("/health")
@@ -15,7 +31,8 @@ bp = Blueprint("health", __name__)
 def health():
     cfg = current_app.config
     ml_status = get_registry().status()
-    healthy = ml_status["model_loaded"] and ml_status["normalizer_match"]
+    db_connected, db_error = _check_database_connection()
+    healthy = ml_status["model_loaded"] and ml_status["normalizer_match"] and db_connected
     return ok(
         {
             "status": "ok" if healthy else "degraded",
@@ -24,9 +41,10 @@ def health():
             "environment": cfg["ENV"],
             "ml": ml_status,
             "database": {
-                # Status koneksi nyata ditambahkan pada Part 3.
                 "configured": cfg["DATABASE_CONFIGURED"],
+                "connected": db_connected,
                 "mode": "session_pooler",
+                "error": db_error,
             },
             "integrations": {
                 "google_oauth_configured": bool(cfg["GOOGLE_CLIENT_ID"] and cfg["GOOGLE_CLIENT_SECRET"]),

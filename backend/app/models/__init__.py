@@ -1,1 +1,23 @@
-"""Model SQLAlchemy (diisi mulai Part 3: users, app_meta; Part 4: videos, comments, jobs)."""
+"""Ekspor seluruh model SQLAlchemy JudolGuard."""
+
+from .entities import (
+    AppMeta,
+    ChatLog,
+    Comment,
+    Job,
+    Keyword,
+    ModerationLog,
+    User,
+    Video,
+)
+
+__all__ = [
+    "AppMeta",
+    "ChatLog",
+    "Comment",
+    "Job",
+    "Keyword",
+    "ModerationLog",
+    "User",
+    "Video",
+]

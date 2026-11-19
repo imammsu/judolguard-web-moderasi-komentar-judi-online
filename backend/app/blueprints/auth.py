@@ -19,6 +19,7 @@ from flask import Blueprint, current_app, g, redirect, request, session, url_for
 
 from ..auth_guard import SESSION_COOKIE_KEY, login_required
 from ..extensions import oauth
+from ..repositories import user_repo
 from ..responses import fail, ok
 from ..services.oauth_service import (
     OAuthFlowError,
@@ -129,7 +130,23 @@ def callback():
     except OAuthFlowError as exc:
         return fail(exc.code, exc.message, exc.status)
 
-    # 5. Simpan token di ServerSessionStore (BUKAN di cookie klien!)
+    # 5. Simpan pengguna & refresh token terenkripsi ke tabel `users` (PRD Part 3)
+    effective_refresh_token = refresh_token
+    try:
+        db_user = user_repo.upsert_user(
+            channel_id=channel["channel_id"],
+            email=email,
+            channel_title=channel["channel_title"],
+            thumbnail_url=channel["thumbnail_url"],
+            refresh_token_plain=refresh_token,
+        )
+        if not effective_refresh_token and db_user.refresh_token_enc:
+            effective_refresh_token = user_repo.get_decrypted_refresh_token(channel["channel_id"])
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("Gagal menyimpan pengguna ke database: %s", exc)
+        return fail("database_error", "Gagal menyimpan data pengguna ke database.", 500)
+
+    # 6. Simpan sesi aktif di ServerSessionStore (BUKAN di cookie klien!)
     old_sid = session.get(SESSION_COOKIE_KEY)
     if old_sid:
         session_store.delete(old_sid)
@@ -144,7 +161,7 @@ def callback():
         thumbnail_url=channel["thumbnail_url"],
         custom_url=channel.get("custom_url"),
         access_token=access_token,
-        refresh_token=refresh_token,
+        refresh_token=effective_refresh_token,
         expires_at=float(expires_at) if expires_at is not None else None,
     )
     # Cookie HttpOnly hanya menyimpan sid acak

@@ -6,6 +6,7 @@ import logging
 
 from flask import Flask, abort, send_from_directory
 
+from . import models  # noqa: F401 - daftarkan seluruh model ke SQLAlchemy metadata
 from .blueprints import register_blueprints
 from .config import FRONTEND_DIST, Config, finalize_config
 from .errors import register_error_handlers

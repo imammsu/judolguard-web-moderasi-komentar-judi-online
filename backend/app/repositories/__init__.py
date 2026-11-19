@@ -1,1 +1,5 @@
-"""Lapisan query database (diisi mulai Part 3). Semua query wajib memfilter owner_channel_id."""
+"""Lapisan repository database JudolGuard."""
+
+from . import meta_repo, user_repo
+
+__all__ = ["meta_repo", "user_repo"]

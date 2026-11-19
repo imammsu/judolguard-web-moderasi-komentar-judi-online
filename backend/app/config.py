@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 from dotenv import load_dotenv
 
@@ -32,16 +33,25 @@ def _env_int(name: str, default: int) -> int:
 
 
 def _normalize_db_url(url: str) -> str:
-    """Pakai driver psycopg v3 untuk URI PostgreSQL dari dasbor Supabase."""
-    for prefix in ("postgres://", "postgresql://"):
+    """Pakai driver psycopg v3 dan auto-encode karakter '@' di password URI Supabase."""
+    if not url:
+        return ""
+    for prefix in ("postgres://", "postgresql://", "postgresql+psycopg://"):
         if url.startswith(prefix):
-            return "postgresql+psycopg://" + url[len(prefix):]
+            rest = url[len(prefix) :]
+            if "@" in rest:
+                userinfo, _, hostpart = rest.rpartition("@")
+                if ":" in userinfo:
+                    user, _, raw_pass = userinfo.partition(":")
+                    encoded_pass = quote(unquote(raw_pass), safe="")
+                    rest = f"{user}:{encoded_pass}@{hostpart}"
+            return "postgresql+psycopg://" + rest
     return url
 
 
 class Config:
     APP_NAME = "JudolGuard API"
-    APP_VERSION = "0.2.0"
+    APP_VERSION = "0.3.0"
 
     ENV = _env("FLASK_ENV", "production")
     DEBUG = _env("FLASK_DEBUG", "0") == "1"
@@ -103,6 +113,9 @@ class TestingConfig(Config):
     FERNET_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     GOOGLE_CLIENT_ID = "test-client-id.apps.googleusercontent.com"
     GOOGLE_CLIENT_SECRET = "GOCSPX-test-client-secret"
+    DATABASE_CONFIGURED = False
+    SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+    SQLALCHEMY_ENGINE_OPTIONS = {}
     SESSION_COOKIE_SECURE = False
     RATELIMIT_ENABLED = False
 

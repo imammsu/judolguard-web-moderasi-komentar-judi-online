@@ -545,8 +545,8 @@ Setiap part menghasilkan sesuatu yang dapat didemokan dan ditandai sebagai rilis
 | --- | --- | --- | --- |
 | 0 | Fondasi data dan model ML | v0.0 | ✅ Selesai |
 | 1 | Fondasi aplikasi | v0.1 | ✅ Selesai |
-| 2 | Implementasi OAuth login | v0.2 | ⬜ Belum |
-| 3 | Database Supabase | v0.3 | ⬜ Belum |
+| 2 | Implementasi OAuth login | v0.2 | ✅ Selesai (Backend) |
+| 3 | Database Supabase | v0.3 | ✅ Selesai |
 | 4 | Pengambilan video dan komentar | v0.4 | ⬜ Belum |
 | 5 | Klasifikasi dan review | v0.5 | ⬜ Belum |
 | 6 | Reject komentar | v0.6 | ⬜ Belum |
