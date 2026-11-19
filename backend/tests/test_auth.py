@@ -159,3 +159,43 @@ def test_auth_callback_success_stores_tokens_server_side_and_not_in_cookie(clien
     # 7. Panggil /api/me setelah logout -> kembali 401
     after_res = client.get("/api/me")
     assert after_res.status_code == 401
+
+
+def test_auth_login_with_next_url_redirects_to_target(client, monkeypatch):
+    """Alur lengkap: ?next=/videos -> callback -> redirect ke /videos (PRD 6.1)."""
+    # 1. Mulai login dengan ?next=/videos
+    login_res = client.get("/auth/login?next=/videos")
+    assert login_res.status_code == 302
+    state = parse_qs(urlparse(login_res.headers["Location"]).query)["state"][0]
+
+    monkeypatch.setattr(
+        oauth.google,
+        "authorize_access_token",
+        lambda: {
+            "access_token": "ya29.next-redirect-test-token",
+            "refresh_token": "1//next-redirect-refresh",
+            "expires_at": 1899999999,
+            "userinfo": {"email": "videos-creator@example.com"},
+        },
+    )
+    monkeypatch.setattr(
+        "app.blueprints.auth.fetch_my_youtube_channel",
+        lambda _token: {
+            "channel_id": "UC_NEXT_REDIRECT_TEST",
+            "channel_title": "Channel Redirect Uji",
+            "custom_url": "@redirectuji",
+            "thumbnail_url": "https://yt3.ggpht.com/redirect-thumb.jpg",
+        },
+    )
+
+    # 2. Panggil callback -> harus redirect ke /videos
+    cb_res = client.get(f"/auth/callback?code=valid-code&state={state}")
+    assert cb_res.status_code == 302
+    assert cb_res.headers["Location"].endswith("/videos")
+
+    # 3. Sesi tersimpan di server, profil tersedia lewat /api/me
+    me_res = client.get("/api/me")
+    assert me_res.status_code == 200
+    user = me_res.get_json()["data"]["user"]
+    assert user["channel_id"] == "UC_NEXT_REDIRECT_TEST"
+    assert user["channel_title"] == "Channel Redirect Uji"

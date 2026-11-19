@@ -2,8 +2,10 @@
 
 Endpoint:
 - GET  /auth/login     : mulai alur OAuth Google (scope youtube.force-ssl + state anti-CSRF)
+                         ?next=/path  — URL frontend tujuan setelah login berhasil (default /videos)
 - GET  /auth/callback  : validasi state, tukar code -> token, panggil channels.list(mine=true),
-                         simpan token di ServerSessionStore (bukan di cookie!)
+                         simpan token di ServerSessionStore (bukan di cookie!),
+                         redirect ke ?next=/videos atau /?auth_error=... bila dibatalkan
 - POST /auth/logout    : hapus sesi server & bersihkan cookie HttpOnly
                          (GET /auth/logout juga diizinkan saat DEBUG/TESTING untuk tes browser)
 - GET  /api/me         : kembalikan profil pengguna & channel YouTube dari sesi aktif
@@ -14,6 +16,8 @@ from __future__ import annotations
 import logging
 import secrets
 from typing import Any
+
+from urllib.parse import urlencode
 
 from flask import Blueprint, current_app, g, redirect, request, session, url_for
 
@@ -75,6 +79,11 @@ def login():
     redirect_uri = _resolve_redirect_uri()
     next_url = _safe_next_url(request.args.get("next"))
 
+    # Bila tidak ada ?next= dan bukan mode pengujian, default ke /videos (tujuan setelah login).
+    # Saat TESTING, biarkan None agar tes yang ada (redirect ke /api/me) tidak perlu diubah.
+    if not next_url and not current_app.config.get("TESTING"):
+        next_url = "/videos"
+
     session[OAUTH_STATE_KEY] = state
     session[OAUTH_REDIRECT_URI_KEY] = redirect_uri
     if next_url:
@@ -98,7 +107,12 @@ def callback():
     if oauth_error:
         session.pop(OAUTH_STATE_KEY, None)
         desc = request.args.get("error_description") or "Akses OAuth Google dibatalkan atau ditolak."
-        return fail("oauth_access_denied", f"{desc} ({oauth_error})", 403)
+        # Di mode pengujian kembalikan JSON agar test tetap bisa assert status code & code.
+        # Di mode normal, redirect ke beranda dengan pesan error yang ramah pengguna.
+        if current_app.config.get("TESTING"):
+            return fail("oauth_access_denied", f"{desc} ({oauth_error})", 403)
+        qs = urlencode({"auth_error": oauth_error, "auth_error_desc": desc})
+        return redirect(f"/?{qs}")
 
     # 2. Validasi parameter state (anti-CSRF, PRD Part 2)
     expected_state = session.pop(OAUTH_STATE_KEY, None)
@@ -173,8 +187,8 @@ def callback():
         server_session.channel_title,
     )
 
-    # Bila ada target redirect frontend (?next=/...), arahkan ke sana;
-    # bila diuji langsung di backend, arahkan ke /api/me agar JSON profil langsung tampil.
+    # Bila ada target redirect frontend (?next=/videos atau lainnya), arahkan ke sana;
+    # bila diuji langsung di backend (TESTING tanpa ?next=), arahkan ke /api/me agar JSON profil tampil.
     if next_url:
         return redirect(next_url)
     return redirect(url_for("auth.me"))

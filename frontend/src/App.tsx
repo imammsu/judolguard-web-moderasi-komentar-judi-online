@@ -2,8 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 
 import Layout from './components/Layout';
-import HomePage from './pages/HomePage';
+import JudolLandingPage from './pages/JudolLandingPage';
 import NotFoundPage from './pages/NotFoundPage';
+import VideosPage from './pages/VideosPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,8 +17,9 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
+          <Route index element={<JudolLandingPage />} />
+          <Route path="/videos" element={<VideosPage />} />
           <Route element={<Layout />}>
-            <Route index element={<HomePage />} />
             <Route path="*" element={<NotFoundPage />} />
           </Route>
         </Routes>

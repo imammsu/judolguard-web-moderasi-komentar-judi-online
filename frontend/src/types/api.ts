@@ -40,11 +40,26 @@ export interface HealthData {
   ml: MlStatus;
   database: {
     configured: boolean;
+    connected: boolean;
     mode: 'session_pooler';
+    error: string | null;
   };
   integrations: {
     google_oauth_configured: boolean;
     gemini_configured: boolean;
     groq_configured: boolean;
   };
+}
+
+export interface UserProfile {
+  channel_id: string;
+  channel_title: string;
+  email: string;
+  thumbnail_url: string;
+  custom_url: string | null;
+}
+
+export interface MeData {
+  authenticated: boolean;
+  user: UserProfile;
 }
