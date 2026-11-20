@@ -480,3 +480,43 @@ def fetch_video_metadata(
         }
         for video_id, detail in details.items()
     ]
+
+
+def reject_comment_batch(access_token: str, comment_ids: list[str]) -> None:
+    """Reject maksimal 50 komentar dalam satu panggilan API."""
+    if not access_token:
+        raise YouTubeServiceError(
+            "youtube_unauthorized",
+            "Token YouTube tidak tersedia. Silakan login kembali.",
+            401,
+        )
+    if not comment_ids or len(comment_ids) > 50:
+        raise YouTubeServiceError(
+            "invalid_comment_batch",
+            "Batch reject harus berisi 1 sampai 50 komentar.",
+            400,
+        )
+
+    try:
+        response = requests.post(
+            f"{YOUTUBE_API_BASE}/comments/setModerationStatus",
+            params={
+                "id": ",".join(comment_ids),
+                "moderationStatus": "rejected",
+            },
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept-Encoding": "gzip",
+                "User-Agent": "JudolGuard/0.6 (gzip)",
+            },
+            timeout=YOUTUBE_REQUEST_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        raise YouTubeServiceError(
+            "youtube_unavailable",
+            "YouTube API tidak dapat dihubungi. Coba lagi beberapa saat.",
+            502,
+        ) from exc
+
+    if not response.ok:
+        raise _error_from_response(response)

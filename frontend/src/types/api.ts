@@ -127,3 +127,34 @@ export interface JobData {
   created_at: string | null;
   updated_at: string | null;
 }
+
+export interface RejectPreviewData {
+  estimate: {
+    comment_count: number;
+    batch_count: number;
+    ids_per_batch: number;
+    estimated_quota_units: number;
+    remaining_quota_units: number;
+    sufficient: boolean;
+  };
+  quota: {
+    date: string;
+    used_units: number;
+    daily_limit: number;
+    remaining_units: number;
+    updated_at: string | null;
+  };
+}
+
+export interface RejectSummary {
+  requested: number;
+  succeeded: number;
+  failed: number;
+  comment_count: number;
+  batch_count: number;
+  ids_per_batch: number;
+  estimated_quota_units: number;
+  rejected: string[];
+  failures: Array<{ comment_id: string; error: string }>;
+  quota: RejectPreviewData['quota'];
+}

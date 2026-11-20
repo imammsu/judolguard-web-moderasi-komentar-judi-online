@@ -1,6 +1,7 @@
 import {
   AlertCircle,
   ArrowLeft,
+  Ban,
   Bot,
   CheckCircle2,
   Filter,
@@ -8,6 +9,7 @@ import {
   LoaderCircle,
   RefreshCw,
   ShieldCheck,
+  X,
   Youtube,
 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -16,6 +18,7 @@ import { Link, useParams } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import { useAuth } from '../hooks/useAuth';
+import { type RejectTarget, useModeration } from '../hooks/useModeration';
 import { useScanJob } from '../hooks/useScanJob';
 import { useVideoComments } from '../hooks/useVideoComments';
 import { useVideoDetail } from '../hooks/useVideoDetail';
@@ -94,16 +97,47 @@ function ScanProgress({
 
 function CommentTable({
   videoId,
+  onRequestReject,
+  selectionResetToken,
 }: {
   videoId: string;
+  onRequestReject: (target: RejectTarget) => void;
+  selectionResetToken: number;
 }) {
   const [zone, setZone] = useState('all');
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [sort, setSort] = useState('score_desc');
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const filters = { zone, search, sort, page, pageSize: 50 };
   const { data, error, isLoading, isFetching, refetch } = useVideoComments(videoId, filters);
+  const selectableIds = (data?.items ?? [])
+    .filter((comment) => comment.moderation_status !== 'rejected')
+    .map((comment) => comment.comment_id);
+  const allPageSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.has(id));
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [selectionResetToken]);
+
+  const toggleSelected = (commentId: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(commentId)) next.delete(commentId);
+      else next.add(commentId);
+      return next;
+    });
+  };
+
+  const toggleAllPage = () => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allPageSelected) selectableIds.forEach((id) => next.delete(id));
+      else selectableIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
 
   const applySearch = () => {
     setPage(1);
@@ -153,6 +187,37 @@ function CommentTable({
           <option value="oldest">Terlama</option>
         </select>
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
+        <label className="inline-flex items-center gap-2 text-sm font-medium text-indigo-900">
+          <input
+            type="checkbox"
+            checked={allPageSelected}
+            onChange={toggleAllPage}
+            disabled={!selectableIds.length}
+            className="h-4 w-4 rounded border-indigo-300 text-indigo-600"
+          />
+          Pilih semua di halaman
+        </label>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={!selectedIds.size}
+            onClick={() => onRequestReject({ comment_ids: Array.from(selectedIds) })}
+            className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-2 text-xs font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Ban className="h-3.5 w-3.5" />
+            Reject terpilih ({selectedIds.size})
+          </button>
+          <button
+            type="button"
+            onClick={() => onRequestReject({ video_id: videoId, all_judol: true })}
+            className="inline-flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
+          >
+            <Ban className="h-3.5 w-3.5" />
+            Reject semua judol
+          </button>
+        </div>
+      </div>
 
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         {isLoading ? (
@@ -164,9 +229,19 @@ function CommentTable({
             {data.items.map((comment) => (
               <article key={comment.comment_id} className="space-y-3 p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">{comment.author_name || 'Akun YouTube'}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">{formatDate(comment.published_at)}</p>
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(comment.comment_id)}
+                      onChange={() => toggleSelected(comment.comment_id)}
+                      disabled={comment.moderation_status === 'rejected'}
+                      className="mt-1 h-4 w-4 rounded border-slate-300 text-indigo-600"
+                      aria-label={`Pilih komentar dari ${comment.author_name || 'akun YouTube'}`}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">{comment.author_name || 'Akun YouTube'}</p>
+                      <p className="mt-0.5 text-xs text-slate-400">{formatDate(comment.published_at)}</p>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <ZoneBadge zone={comment.zone} />
@@ -179,7 +254,7 @@ function CommentTable({
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
                   <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {formatNumber(comment.like_count)} like</span>
                   {comment.rule_hit && <span className="rounded bg-amber-50 px-2 py-1 font-medium text-amber-700">Terkena aturan iklan</span>}
-                  <span>Status: {comment.moderation_status}</span>
+                  <span>Status: {comment.moderation_status === 'rejected' ? 'Sudah direject' : 'Belum direject'}</span>
                 </div>
               </article>
             ))}
@@ -205,6 +280,92 @@ function CommentTable({
   );
 }
 
+function RejectDialog({
+  preview,
+  pending,
+  error,
+  onClose,
+  onConfirm,
+}: {
+  preview: {
+    estimate: {
+      comment_count: number;
+      batch_count: number;
+      ids_per_batch: number;
+      estimated_quota_units: number;
+      remaining_quota_units: number;
+      sufficient: boolean;
+    };
+    quota: {
+      used_units: number;
+      daily_limit: number;
+      remaining_units: number;
+    };
+  };
+  pending: boolean;
+  error: Error | null;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const { estimate, quota } = preview;
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/40 px-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-rose-600">Konfirmasi moderasi</p>
+            <h2 className="mt-1 text-xl font-bold text-slate-900">Reject komentar?</h2>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Tutup dialog">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          Komentar akan disembunyikan dari publik YouTube. Aksi ini tidak dapat dibatalkan dari JudolGuard.
+        </p>
+        <dl className="mt-5 divide-y divide-slate-100 rounded-xl border border-slate-200 px-4">
+          <div className="flex justify-between gap-4 py-3 text-sm">
+            <dt className="text-slate-500">Komentar dipilih</dt>
+            <dd className="font-semibold text-slate-900">{formatNumber(estimate.comment_count)}</dd>
+          </div>
+          <div className="flex justify-between gap-4 py-3 text-sm">
+            <dt className="text-slate-500">Jumlah batch</dt>
+            <dd className="font-semibold text-slate-900">{formatNumber(estimate.batch_count)} × maksimal {estimate.ids_per_batch} ID</dd>
+          </div>
+          <div className="flex justify-between gap-4 py-3 text-sm">
+            <dt className="text-slate-500">Estimasi kuota</dt>
+            <dd className="font-semibold text-rose-700">±{formatNumber(estimate.estimated_quota_units)} unit</dd>
+          </div>
+          <div className="flex justify-between gap-4 py-3 text-sm">
+            <dt className="text-slate-500">Kuota tersisa</dt>
+            <dd className="font-semibold text-slate-900">{formatNumber(quota.remaining_units)} unit</dd>
+          </div>
+        </dl>
+        {!estimate.sufficient && (
+          <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">
+            Kuota harian tidak mencukupi untuk aksi ini.
+          </p>
+        )}
+        {error && <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-700">{error.message}</p>}
+        <div className="mt-6 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            Batal
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={!estimate.sufficient || pending}
+            className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {pending && <LoaderCircle className="h-4 w-4 animate-spin" />}
+            {pending ? 'Memproses…' : 'Konfirmasi Reject'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AccessDenied({ onLogin }: { onLogin: () => void }) {
   return (
     <div className="flex min-h-[70vh] items-center justify-center px-4">
@@ -226,6 +387,10 @@ export default function VideoDetailPage() {
   const queryClient = useQueryClient();
   const { data: video, isLoading: videoLoading, error: videoError } = useVideoDetail(videoId, Boolean(user));
   const { mutate: startScan, isPending: scanStarting, job, resetJob } = useScanJob(videoId);
+  const { preview, reject } = useModeration(videoId);
+  const [rejectTarget, setRejectTarget] = useState<RejectTarget | null>(null);
+  const [moderationResult, setModerationResult] = useState<string | null>(null);
+  const [selectionResetToken, setSelectionResetToken] = useState(0);
 
   useEffect(() => {
     if (job?.status === 'done') {
@@ -244,6 +409,32 @@ export default function VideoDetailPage() {
 
   const running = job && (job.status === 'queued' || job.status === 'running');
   const completed = job?.status === 'done';
+  const requestReject = (target: RejectTarget) => {
+    setRejectTarget(target);
+    setModerationResult(null);
+    preview.reset();
+    reject.reset();
+    preview.mutate(target);
+  };
+  const closeRejectDialog = () => {
+    setRejectTarget(null);
+    preview.reset();
+    reject.reset();
+  };
+  const confirmReject = () => {
+    if (!rejectTarget) return;
+    reject.mutate(rejectTarget, {
+      onSuccess: (summary) => {
+        setModerationResult(
+          summary.failed > 0
+            ? `${formatNumber(summary.succeeded)} komentar berhasil direject, ${formatNumber(summary.failed)} gagal.`
+            : `${formatNumber(summary.succeeded)} komentar berhasil direject.`,
+        );
+        setSelectionResetToken((current) => current + 1);
+        closeRejectDialog();
+      },
+    });
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -279,8 +470,43 @@ export default function VideoDetailPage() {
 
         {job && <ScanProgress status={job.status} progress={job.progress} processed={job.processed} total={job.total} error={job.error} />}
 
-        <CommentTable videoId={videoId} />
+        {moderationResult && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+            {moderationResult}
+          </div>
+        )}
+        <CommentTable
+          videoId={videoId}
+          onRequestReject={requestReject}
+          selectionResetToken={selectionResetToken}
+        />
       </main>
+      {rejectTarget && preview.data && (
+        <RejectDialog
+          preview={preview.data}
+          pending={reject.isPending}
+          error={reject.error instanceof Error ? reject.error : null}
+          onClose={closeRejectDialog}
+          onConfirm={confirmReject}
+        />
+      )}
+      {rejectTarget && preview.isPending && !preview.data && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/40 px-4">
+          <div className="flex items-center gap-3 rounded-xl bg-white px-5 py-4 text-sm font-medium text-slate-700 shadow-xl">
+            <LoaderCircle className="h-5 w-5 animate-spin text-indigo-600" />
+            Menghitung estimasi kuota…
+          </div>
+        </div>
+      )}
+      {rejectTarget && preview.error && !preview.isPending && (
+        <div className="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/40 px-4">
+          <div className="max-w-md rounded-xl bg-white p-5 shadow-xl">
+            <p className="font-semibold text-rose-800">Tidak dapat menyiapkan reject</p>
+            <p className="mt-2 text-sm text-slate-600">{preview.error instanceof Error ? preview.error.message : 'Terjadi kesalahan.'}</p>
+            <button type="button" onClick={closeRejectDialog} className="mt-4 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white">Tutup</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

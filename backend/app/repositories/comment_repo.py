@@ -34,6 +34,48 @@ def get_unclassified_comments(owner_channel_id: str, video_id: str) -> list[Comm
     return list(db.session.scalars(stmt))
 
 
+def get_owned_comments_by_ids(owner_channel_id: str, comment_ids: list[str]) -> list[Comment]:
+    if not comment_ids:
+        return []
+    stmt = select(Comment).where(
+        Comment.owner_channel_id == owner_channel_id,
+        Comment.comment_id.in_(comment_ids),
+    )
+    return list(db.session.scalars(stmt))
+
+
+def get_judol_comments(owner_channel_id: str, video_id: str | None = None) -> list[Comment]:
+    filters = [
+        Comment.owner_channel_id == owner_channel_id,
+        Comment.zone == "judol",
+        Comment.moderation_status != "rejected",
+    ]
+    if video_id:
+        filters.append(Comment.video_id == video_id)
+    stmt = select(Comment).where(*filters).order_by(Comment.score.desc().nulls_last())
+    return list(db.session.scalars(stmt))
+
+
+def mark_moderation_status(owner_channel_id: str, comment_ids: list[str], status: str) -> int:
+    if not comment_ids:
+        return 0
+    statement = (
+        update(Comment)
+        .where(
+            Comment.owner_channel_id == owner_channel_id,
+            Comment.comment_id.in_(comment_ids),
+        )
+        .values(moderation_status=status)
+    )
+    try:
+        updated = int(db.session.execute(statement).rowcount or 0)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return updated
+
+
 def bulk_upsert_comments(
     owner_channel_id: str,
     video_id: str,

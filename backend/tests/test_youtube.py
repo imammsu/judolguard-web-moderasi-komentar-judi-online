@@ -119,3 +119,23 @@ def test_comment_fetch_stops_at_existing_comment(monkeypatch):
     assert calls[0][0] == "commentThreads"
     assert calls[0][1]["maxResults"] == 100
     assert calls[0][1]["order"] == "time"
+
+
+def test_reject_comment_batch_sends_comma_separated_ids(monkeypatch):
+    calls: list[dict] = []
+
+    class FakeResponse:
+        ok = True
+
+    def fake_post(url: str, **kwargs):
+        calls.append({"url": url, **kwargs})
+        return FakeResponse()
+
+    monkeypatch.setattr(youtube.requests, "post", fake_post)
+
+    youtube.reject_comment_batch("access-token", ["comment-1", "comment-2"])
+
+    assert calls[0]["url"].endswith("/comments/setModerationStatus")
+    assert calls[0]["params"]["id"] == "comment-1,comment-2"
+    assert calls[0]["params"]["moderationStatus"] == "rejected"
+    assert calls[0]["headers"]["Authorization"] == "Bearer access-token"

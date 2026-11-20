@@ -10,6 +10,8 @@ from ..models import AppMeta
 
 MODEL_META_KEY = "ml_model_info"
 VIDEO_SYNC_META_PREFIX = "video_sync:"
+YOUTUBE_QUOTA_PREFIX = "youtube_quota:"
+DEFAULT_DAILY_QUOTA_LIMIT = 10_000
 
 
 def get_meta(key: str) -> dict[str, Any] | None:
@@ -36,6 +38,30 @@ def get_video_sync_meta(owner_channel_id: str) -> dict[str, Any]:
 
 def set_video_sync_meta(owner_channel_id: str, value: dict[str, Any]) -> AppMeta:
     return set_meta(f"{VIDEO_SYNC_META_PREFIX}{owner_channel_id}", value)
+
+
+def get_daily_quota(date_key: str, limit: int = DEFAULT_DAILY_QUOTA_LIMIT) -> dict[str, Any]:
+    key = f"{YOUTUBE_QUOTA_PREFIX}{date_key}"
+    value = get_meta(key) or {}
+    return {
+        "date": date_key,
+        "used_units": int(value.get("used_units") or 0),
+        "daily_limit": int(value.get("daily_limit") or limit),
+        "updated_at": value.get("updated_at"),
+    }
+
+
+def add_daily_quota_usage(
+    date_key: str,
+    units: int,
+    limit: int = DEFAULT_DAILY_QUOTA_LIMIT,
+) -> dict[str, Any]:
+    current = get_daily_quota(date_key, limit)
+    current["used_units"] += max(0, int(units))
+    current["daily_limit"] = int(current.get("daily_limit") or limit)
+    current["updated_at"] = datetime.now(UTC).isoformat()
+    set_meta(f"{YOUTUBE_QUOTA_PREFIX}{date_key}", current)
+    return current
 
 
 def sync_model_meta(ml_status: dict[str, Any]) -> AppMeta:
