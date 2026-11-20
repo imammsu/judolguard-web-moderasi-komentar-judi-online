@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
+import AppearanceControls from '../components/AppearanceControls';
 import { useAuth } from '../hooks/useAuth';
 import { useVideos } from '../hooks/useVideos';
 import type { VideoItem } from '../types/api';
@@ -62,6 +63,7 @@ function TopNav({
               <p className="text-xs text-slate-500">{email}</p>
             </div>
           </div>
+          <AppearanceControls />
           <button
             type="button"
             onClick={onLogout}
@@ -349,7 +351,7 @@ export default function VideosPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
+      <div className="app-shell flex min-h-screen items-center justify-center bg-slate-50">
         <div className="space-y-3 text-center">
           <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100">
             <ShieldCheck className="h-6 w-6 animate-pulse text-indigo-600" />
@@ -362,7 +364,7 @@ export default function VideosPage() {
 
   if (!user) {
     return (
-      <div className="min-h-screen bg-slate-50 px-4">
+      <div className="app-shell min-h-screen bg-slate-50 px-4">
         <div className="mx-auto max-w-6xl py-8">
           <AccessDenied onLogin={() => login('/videos')} />
         </div>
@@ -371,7 +373,7 @@ export default function VideosPage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-shell min-h-screen bg-slate-50">
       <TopNav
         channelTitle={user.channel_title}
         thumbnailUrl={user.thumbnail_url}

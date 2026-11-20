@@ -8,19 +8,19 @@ import {
   SecuritySection,
   WaysSection,
 } from '../components/landing/ContentSections';
-import { LandingCtx, type PaletteName } from '../components/landing/ctx';
+import { LandingCtx } from '../components/landing/ctx';
 import { LandingHero, LandingNav } from '../components/landing/HeroSection';
 import '../components/landing/judol-landing.css';
 import { PALETTES, PaintCtx, useReducedMotion } from '../components/landing/meadow-canvas';
 import { useAuth } from '../hooks/useAuth';
+import { useAppearance } from '../theme/useAppearance';
 
 const EMPTY_IMAGES: Record<string, string> = {};
 
 export default function JudolLandingPage() {
   const { user, loading: authLoading, login, logout } = useAuth();
   const reduced = useReducedMotion();
-  const [palette, setPalette] = React.useState<PaletteName>('meadow');
-  const [dark, setDark] = React.useState(false);
+  const { palette, setPalette, dark, toggleDark } = useAppearance();
   const root = React.useRef<HTMLDivElement | null>(null);
 
   const tokens = React.useMemo(() => {
@@ -81,9 +81,9 @@ export default function JudolLandingPage() {
       palette,
       setPalette,
       dark,
-      toggleDark: () => setDark((d) => !d),
+       toggleDark,
     }),
-    [user, authLoading, login, logout, go, palette, dark],
+    [user, authLoading, login, logout, go, palette, setPalette, dark, toggleDark],
   );
 
   const vars = {

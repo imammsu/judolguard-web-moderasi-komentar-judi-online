@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
+import AppearanceControls from '../components/AppearanceControls';
 import { KeywordExtractionPanel } from '../components/KeywordExtractionPanel';
 import { useAuth } from '../hooks/useAuth';
 import { type RejectTarget, useModeration } from '../hooks/useModeration';
@@ -432,7 +433,7 @@ export default function VideoDetailPage() {
   }, [job?.status, queryClient, videoId]);
 
   if (authLoading || videoLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Memuat halaman video…</div>;
+    return <div className="app-shell flex min-h-screen items-center justify-center bg-slate-50 text-sm text-slate-500">Memuat halaman video…</div>;
   }
   if (!user) return <AccessDenied onLogin={() => login(`/videos/${videoId}`)} />;
   if (videoError || !video) {
@@ -469,11 +470,14 @@ export default function VideoDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="app-shell min-h-screen bg-slate-50">
       <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link to="/videos" className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700 hover:text-indigo-700"><ArrowLeft className="h-4 w-4" /> Daftar video</Link>
-          <button type="button" onClick={logout} disabled={loggingOut} className="text-sm font-medium text-slate-500 hover:text-slate-900">{loggingOut ? 'Keluar…' : 'Keluar'}</button>
+          <div className="flex items-center gap-3">
+            <AppearanceControls />
+            <button type="button" onClick={logout} disabled={loggingOut} className="text-sm font-medium text-slate-500 hover:text-slate-900">{loggingOut ? 'Keluar…' : 'Keluar'}</button>
+          </div>
         </div>
       </header>
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">

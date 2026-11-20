@@ -6,6 +6,7 @@ import JudolLandingPage from './pages/JudolLandingPage';
 import NotFoundPage from './pages/NotFoundPage';
 import VideoDetailPage from './pages/VideoDetailPage';
 import VideosPage from './pages/VideosPage';
+import { AppearanceProvider } from './theme/AppearanceProvider';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,16 +17,18 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route index element={<JudolLandingPage />} />
-          <Route path="/videos" element={<VideosPage />} />
-          <Route path="/videos/:videoId" element={<VideoDetailPage />} />
-          <Route element={<Layout />}>
-            <Route path="*" element={<NotFoundPage />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <AppearanceProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route index element={<JudolLandingPage />} />
+            <Route path="/videos" element={<VideosPage />} />
+            <Route path="/videos/:videoId" element={<VideoDetailPage />} />
+            <Route element={<Layout />}>
+              <Route path="*" element={<NotFoundPage />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </AppearanceProvider>
     </QueryClientProvider>
   );
 }

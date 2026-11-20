@@ -1,8 +1,9 @@
 import { createContext } from 'react';
 
 import type { UserProfile } from '../../types/api';
+import type { PaletteName } from '../../theme/appearance';
 
-export type PaletteName = 'meadow' | 'lavender' | 'harvest';
+export type { PaletteName };
 
 export interface LandingEnv {
   user: UserProfile | null;
