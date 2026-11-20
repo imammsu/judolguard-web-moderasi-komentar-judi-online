@@ -30,6 +30,31 @@ def get_active_scan(owner_channel_id: str, video_id: str) -> Job | None:
     return db.session.scalars(stmt).first()
 
 
+def get_latest_scan_statuses(
+    owner_channel_id: str,
+    video_ids: list[str] | set[str],
+) -> dict[str, str]:
+    """Ambil status scan terakhir per video tanpa query satu per satu."""
+    clean_ids = list(dict.fromkeys(str(video_id) for video_id in video_ids if video_id))
+    if not clean_ids:
+        return {}
+
+    statement = (
+        select(Job)
+        .where(
+            Job.owner_channel_id == owner_channel_id,
+            Job.video_id.in_(clean_ids),
+            Job.type == "scan",
+        )
+        .order_by(Job.video_id.asc(), Job.created_at.desc())
+    )
+    statuses: dict[str, str] = {}
+    for job in db.session.scalars(statement):
+        if job.video_id and job.video_id not in statuses:
+            statuses[job.video_id] = job.status
+    return statuses
+
+
 def create_job(owner_channel_id: str, video_id: str) -> Job:
     job = Job(
         owner_channel_id=owner_channel_id,

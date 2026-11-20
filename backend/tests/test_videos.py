@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.extensions import db
-from app.models import Video
+from app.models import Comment, Job, Video
 from app.services.session_store import session_store
 
 
@@ -58,6 +58,9 @@ def test_list_videos_fetches_and_persists_cache(client, app, monkeypatch):
     assert data["total"] == 2
     assert data["total_pages"] == 2
     assert data["items"][0]["video_id"] == "video-001"
+    assert data["items"][0]["comment_count"] == 12
+    assert data["items"][0]["stored_comment_count"] == 0
+    assert data["items"][0]["scan_status"] == "not_scanned"
     assert data["refreshed"] is True
     assert data["synced_count"] == 2
     assert data["sync_mode"] == "initial"
@@ -172,4 +175,69 @@ def test_refresh_uses_incremental_sync_and_does_not_duplicate(client, app, monke
         assert stored_old is not None
         assert stored_old.title == "Video Lama Diperbarui"
         assert stored_old.comment_count == 9
-        assert stored_new is not None
+    assert stored_new is not None
+
+
+def test_video_counts_keep_youtube_total_and_count_active_local_comments(client, app):
+    _authenticate(client, "UC_COUNT_OWNER")
+    with app.app_context():
+        db.session.add(
+            Video(
+                video_id="counted-video",
+                owner_channel_id="UC_COUNT_OWNER",
+                title="Video Dengan Komentar",
+                comment_count=1200,
+                published_at=datetime(2026, 11, 20, tzinfo=UTC),
+                last_fetched_at=datetime(2026, 11, 20, tzinfo=UTC),
+            )
+        )
+        db.session.add_all(
+            [
+                Comment(
+                    comment_id="active-comment-1",
+                    video_id="counted-video",
+                    owner_channel_id="UC_COUNT_OWNER",
+                    text_original="Komentar aktif 1",
+                ),
+                Comment(
+                    comment_id="active-comment-2",
+                    video_id="counted-video",
+                    owner_channel_id="UC_COUNT_OWNER",
+                    text_original="Komentar aktif 2",
+                    moderation_status="failed",
+                ),
+                Comment(
+                    comment_id="rejected-comment",
+                    video_id="counted-video",
+                    owner_channel_id="UC_COUNT_OWNER",
+                    text_original="Komentar rejected",
+                    moderation_status="rejected",
+                ),
+            ]
+        )
+        db.session.add(
+            Job(
+                owner_channel_id="UC_COUNT_OWNER",
+                type="scan",
+                video_id="counted-video",
+                status="done",
+                progress=100,
+                total=3,
+                processed=3,
+            )
+        )
+        db.session.commit()
+
+    response = client.get("/api/videos")
+    assert response.status_code == 200
+    item = response.get_json()["data"]["items"][0]
+    assert item["comment_count"] == 1200
+    assert item["stored_comment_count"] == 2
+    assert item["scan_status"] == "done"
+
+    detail = client.get("/api/videos/counted-video")
+    assert detail.status_code == 200
+    detail_data = detail.get_json()["data"]
+    assert detail_data["comment_count"] == 1200
+    assert detail_data["stored_comment_count"] == 2
+    assert detail_data["scan_status"] == "done"

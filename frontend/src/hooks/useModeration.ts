@@ -22,6 +22,7 @@ export function useModeration(videoId: string) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['video-comments', videoId] });
       void queryClient.invalidateQueries({ queryKey: ['video', videoId] });
+      void queryClient.invalidateQueries({ queryKey: ['videos'] });
     },
   });
 

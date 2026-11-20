@@ -56,21 +56,44 @@ def bulk_upsert_videos(
         return 0
 
     fetched_at = fetched_at or datetime.now(UTC)
-    rows = [
+    candidate_rows = [
         {
             "video_id": str(video["video_id"]),
             "owner_channel_id": owner_channel_id,
             "title": video.get("title"),
             "thumbnail_url": video.get("thumbnail_url"),
             "published_at": video.get("published_at"),
-            "comment_count": int(video.get("comment_count") or 0),
+            "comment_count": (
+                int(video["comment_count"])
+                if video.get("comment_count") is not None
+                else None
+            ),
             "last_fetched_at": fetched_at,
         }
         for video in videos
         if video.get("video_id")
     ]
-    if not rows:
+    if not candidate_rows:
         return 0
+
+    video_ids = [row["video_id"] for row in candidate_rows]
+    existing_counts = {
+        video_id: int(comment_count)
+        for video_id, comment_count in db.session.execute(
+            select(Video.video_id, Video.comment_count).where(Video.video_id.in_(video_ids))
+        )
+    }
+    rows = [
+        {
+            **row,
+            "comment_count": (
+                row["comment_count"]
+                if row["comment_count"] is not None
+                else existing_counts.get(row["video_id"], 0)
+            ),
+        }
+        for row in candidate_rows
+    ]
 
     bind = db.session.get_bind()
     insert = postgres_insert if bind.dialect.name == "postgresql" else sqlite_insert

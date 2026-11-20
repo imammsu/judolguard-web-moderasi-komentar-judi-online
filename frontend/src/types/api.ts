@@ -70,6 +70,8 @@ export interface VideoItem {
   thumbnail_url: string;
   published_at: string | null;
   comment_count: number;
+  stored_comment_count: number;
+  scan_status: 'not_scanned' | 'queued' | 'running' | 'done' | 'failed';
   last_fetched_at: string | null;
 }
 

@@ -9,7 +9,7 @@ from flask import Blueprint, current_app, g, request
 
 from ..auth_guard import login_required
 from ..extensions import db
-from ..repositories import job_repo, meta_repo, video_repo
+from ..repositories import comment_repo, job_repo, meta_repo, video_repo
 from ..responses import fail, ok
 from ..services.jobs import submit_scan_job
 from ..services.youtube import (
@@ -76,13 +76,20 @@ def _set_sync_timestamp(owner_channel_id: str, **extra: object) -> None:
     )
 
 
-def _serialize_video(video) -> dict[str, object]:
+def _serialize_video(
+    video,
+    *,
+    stored_comment_count: int = 0,
+    scan_status: str = "not_scanned",
+) -> dict[str, object]:
     return {
         "video_id": video.video_id,
         "title": video.title,
         "thumbnail_url": video.thumbnail_url,
         "published_at": video.published_at.isoformat() if video.published_at else None,
         "comment_count": video.comment_count,
+        "stored_comment_count": stored_comment_count,
+        "scan_status": scan_status,
         "last_fetched_at": video.last_fetched_at.isoformat() if video.last_fetched_at else None,
     }
 
@@ -178,9 +185,19 @@ def list_videos():
         page = total_pages
 
     videos = video_repo.list_videos(owner_channel_id, page, page_size)
+    video_ids = [video.video_id for video in videos]
+    stored_counts = comment_repo.count_active_comments_by_video_ids(owner_channel_id, video_ids)
+    scan_statuses = job_repo.get_latest_scan_statuses(owner_channel_id, video_ids)
     return ok(
         {
-            "items": [_serialize_video(video) for video in videos],
+            "items": [
+                _serialize_video(
+                    video,
+                    stored_comment_count=stored_counts.get(video.video_id, 0),
+                    scan_status=scan_statuses.get(video.video_id, "not_scanned"),
+                )
+                for video in videos
+            ],
             "page": page,
             "page_size": page_size,
             "total": total,
@@ -202,7 +219,21 @@ def get_video_detail(video_id: str):
     video = video_repo.get_video(g.owner_channel_id, video_id)
     if video is None:
         return fail("video_not_found", "Video tidak ditemukan.", 404)
-    return ok(_serialize_video(video))
+    stored_counts = comment_repo.count_active_comments_by_video_ids(
+        g.owner_channel_id,
+        [video.video_id],
+    )
+    scan_status = job_repo.get_latest_scan_statuses(
+        g.owner_channel_id,
+        [video.video_id],
+    ).get(video.video_id, "not_scanned")
+    return ok(
+        _serialize_video(
+            video,
+            stored_comment_count=stored_counts.get(video.video_id, 0),
+            scan_status=scan_status,
+        )
+    )
 
 
 @bp.post("/<video_id>/scan")

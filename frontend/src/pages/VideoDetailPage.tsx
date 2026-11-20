@@ -396,6 +396,7 @@ export default function VideoDetailPage() {
     if (job?.status === 'done') {
       void queryClient.invalidateQueries({ queryKey: ['video-comments', videoId] });
       void queryClient.invalidateQueries({ queryKey: ['video', videoId] });
+      void queryClient.invalidateQueries({ queryKey: ['videos'] });
     }
   }, [job?.status, queryClient, videoId]);
 
@@ -453,7 +454,14 @@ export default function VideoDetailPage() {
             <div className="space-y-4 p-6">
               <p className="text-sm font-medium text-indigo-600">Detail video</p>
               <h1 className="text-2xl font-bold tracking-tight text-slate-900">{video.title}</h1>
-              <p className="text-sm text-slate-500">{formatNumber(video.comment_count)} komentar · Dipublikasikan {formatDate(video.published_at)}</p>
+              <div className="space-y-1 text-sm text-slate-500">
+                <p>{formatNumber(video.comment_count)} komentar di YouTube · Dipublikasikan {formatDate(video.published_at)}</p>
+                <p className="font-medium text-indigo-600">
+                  {video.scan_status === 'not_scanned'
+                    ? 'Belum discan'
+                    : `${formatNumber(video.stored_comment_count)} komentar tersedia untuk moderasi`}
+                </p>
+              </div>
               <button
                 type="button"
                 disabled={Boolean(running) || scanStarting}

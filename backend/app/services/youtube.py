@@ -370,12 +370,14 @@ def _fetch_video_details(access_token: str, video_ids: list[str]) -> dict[str, d
                 continue
             snippet = item.get("snippet") or {}
             statistics = item.get("statistics") or {}
-            details[video_id] = {
+            detail: dict[str, Any] = {
                 "title": str(snippet.get("title") or "Video tanpa judul"),
                 "thumbnail_url": _thumbnail_url(snippet),
                 "published_at": _parse_datetime(snippet.get("publishedAt")),
-                "comment_count": int(statistics.get("commentCount") or 0),
             }
+            if "commentCount" in statistics:
+                detail["comment_count"] = int(statistics["commentCount"] or 0)
+            details[video_id] = detail
     return details
 
 
@@ -386,15 +388,15 @@ def _merge_video_details(
     videos: list[dict[str, Any]] = []
     for item in playlist_items:
         detail = details.get(item["video_id"], {})
-        videos.append(
-            {
-                **item,
-                "title": detail.get("title") or item["title"],
-                "thumbnail_url": detail.get("thumbnail_url") or item["thumbnail_url"],
-                "published_at": detail.get("published_at") or item["published_at"],
-                "comment_count": int(detail.get("comment_count") or 0),
-            }
-        )
+        video = {
+            **item,
+            "title": detail.get("title") or item["title"],
+            "thumbnail_url": detail.get("thumbnail_url") or item["thumbnail_url"],
+            "published_at": detail.get("published_at") or item["published_at"],
+        }
+        if "comment_count" in detail:
+            video["comment_count"] = int(detail["comment_count"])
+        videos.append(video)
     return videos
 
 

@@ -56,6 +56,30 @@ def get_judol_comments(owner_channel_id: str, video_id: str | None = None) -> li
     return list(db.session.scalars(stmt))
 
 
+def count_active_comments_by_video_ids(
+    owner_channel_id: str,
+    video_ids: list[str] | set[str],
+) -> dict[str, int]:
+    """Hitung komentar lokal yang belum direject untuk banyak video sekaligus."""
+    clean_ids = list(dict.fromkeys(str(video_id) for video_id in video_ids if video_id))
+    if not clean_ids:
+        return {}
+
+    statement = (
+        select(Comment.video_id, func.count(Comment.comment_id))
+        .where(
+            Comment.owner_channel_id == owner_channel_id,
+            Comment.video_id.in_(clean_ids),
+            Comment.moderation_status != "rejected",
+        )
+        .group_by(Comment.video_id)
+    )
+    return {
+        str(video_id): int(count)
+        for video_id, count in db.session.execute(statement)
+    }
+
+
 def mark_moderation_status(owner_channel_id: str, comment_ids: list[str], status: str) -> int:
     if not comment_ids:
         return 0

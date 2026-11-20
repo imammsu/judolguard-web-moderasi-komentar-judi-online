@@ -90,6 +90,14 @@ function formatNumber(value: number) {
   return new Intl.NumberFormat('id-ID').format(value);
 }
 
+function scanStatusLabel(status: VideoItem['scan_status']) {
+  if (status === 'not_scanned') return 'Belum discan';
+  if (status === 'queued') return 'Scan dalam antrean';
+  if (status === 'running') return 'Scan sedang berjalan';
+  if (status === 'failed') return 'Scan terakhir gagal';
+  return 'Scan selesai';
+}
+
 function VideoCard({ video }: { video: VideoItem }) {
   return (
     <Link
@@ -119,11 +127,19 @@ function VideoCard({ video }: { video: VideoItem }) {
           </span>
           <span className="inline-flex items-center gap-1.5">
             <MessageSquare className="h-3.5 w-3.5" />
-            {formatNumber(video.comment_count)} komentar
+            {formatNumber(video.comment_count)} komentar di YouTube
           </span>
         </div>
-        <div className="rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700">
-          Pilih video untuk menyiapkan pemindaian komentar
+        <div className="space-y-1 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-700">
+          <p>{scanStatusLabel(video.scan_status)}</p>
+          {video.scan_status === 'done' && (
+            <p className="font-normal text-indigo-600">
+              {formatNumber(video.stored_comment_count)} komentar tersedia untuk moderasi
+            </p>
+          )}
+          {video.scan_status === 'not_scanned' && (
+            <p className="font-normal text-indigo-600">Pilih video untuk menyiapkan pemindaian komentar</p>
+          )}
         </div>
       </div>
     </Link>

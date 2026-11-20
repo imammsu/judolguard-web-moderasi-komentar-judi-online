@@ -88,6 +88,12 @@ def test_reject_preview_and_batch_updates_status_log_and_quota(client, app, monk
         assert {row.moderation_status for row in rows} == {"rejected"}
         assert len(logs) == 2
 
+    detail = client.get("/api/videos/moderation-video")
+    assert detail.status_code == 200
+    detail_data = detail.get_json()["data"]
+    assert detail_data["comment_count"] == 2
+    assert detail_data["stored_comment_count"] == 0
+
 
 def test_reject_all_judol_sends_two_batches_for_51_comments(client, app, monkeypatch):
     _authenticate(client)
