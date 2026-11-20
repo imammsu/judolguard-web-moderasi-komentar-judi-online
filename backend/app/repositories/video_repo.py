@@ -1,0 +1,91 @@
+"""Repository query dan bulk upsert untuk cache video channel."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert as postgres_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+from ..extensions import db
+from ..models import Video
+
+
+def get_latest_fetched_at(owner_channel_id: str) -> datetime | None:
+    stmt = select(func.max(Video.last_fetched_at)).where(Video.owner_channel_id == owner_channel_id)
+    return db.session.scalar(stmt)
+
+
+def count_videos(owner_channel_id: str) -> int:
+    stmt = select(func.count()).select_from(Video).where(Video.owner_channel_id == owner_channel_id)
+    return int(db.session.scalar(stmt) or 0)
+
+
+def get_video_ids(owner_channel_id: str) -> set[str]:
+    stmt = select(Video.video_id).where(Video.owner_channel_id == owner_channel_id)
+    return set(db.session.scalars(stmt))
+
+
+def list_videos(owner_channel_id: str, page: int, page_size: int) -> list[Video]:
+    stmt = (
+        select(Video)
+        .where(Video.owner_channel_id == owner_channel_id)
+        .order_by(Video.published_at.desc(), Video.video_id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return list(db.session.scalars(stmt))
+
+
+def bulk_upsert_videos(
+    owner_channel_id: str,
+    videos: list[dict[str, Any]],
+    fetched_at: datetime | None = None,
+) -> int:
+    if not videos:
+        return 0
+
+    fetched_at = fetched_at or datetime.now(UTC)
+    rows = [
+        {
+            "video_id": str(video["video_id"]),
+            "owner_channel_id": owner_channel_id,
+            "title": video.get("title"),
+            "thumbnail_url": video.get("thumbnail_url"),
+            "published_at": video.get("published_at"),
+            "comment_count": int(video.get("comment_count") or 0),
+            "last_fetched_at": fetched_at,
+        }
+        for video in videos
+        if video.get("video_id")
+    ]
+    if not rows:
+        return 0
+
+    bind = db.session.get_bind()
+    insert = postgres_insert if bind.dialect.name == "postgresql" else sqlite_insert
+    statement = insert(Video.__table__).values(rows)
+    update_columns = {
+        column: getattr(statement.excluded, column)
+        for column in (
+            "owner_channel_id",
+            "title",
+            "thumbnail_url",
+            "published_at",
+            "comment_count",
+            "last_fetched_at",
+        )
+    }
+    statement = statement.on_conflict_do_update(
+        index_elements=["video_id"],
+        set_=update_columns,
+    )
+    try:
+        result = db.session.execute(statement)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return int(result.rowcount or 0)

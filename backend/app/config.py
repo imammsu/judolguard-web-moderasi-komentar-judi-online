@@ -70,6 +70,9 @@ class Config:
     GOOGLE_CLIENT_SECRET = _env("GOOGLE_CLIENT_SECRET")
     GOOGLE_REDIRECT_URI = _env("GOOGLE_REDIRECT_URI", "http://localhost:5173/auth/callback")
     MAX_COMMENTS_PER_SCAN = _env_int("MAX_COMMENTS_PER_SCAN", 2000)
+    MAX_VIDEOS_PER_SYNC = _env_int("MAX_VIDEOS_PER_SYNC", 500)
+    MAX_NEW_VIDEOS_PER_SYNC = _env_int("MAX_NEW_VIDEOS_PER_SYNC", 100)
+    MAX_INCREMENTAL_PAGES = _env_int("MAX_INCREMENTAL_PAGES", 10)
 
     # Database Supabase - Session Mode Pooler (Part 3, PRD 11.3)
     DATABASE_URL = _normalize_db_url(_env("DATABASE_URL"))

@@ -9,6 +9,7 @@ from ..extensions import db
 from ..models import AppMeta
 
 MODEL_META_KEY = "ml_model_info"
+VIDEO_SYNC_META_PREFIX = "video_sync:"
 
 
 def get_meta(key: str) -> dict[str, Any] | None:
@@ -27,6 +28,14 @@ def set_meta(key: str, value: dict[str, Any]) -> AppMeta:
         row.value = dict(value)
     db.session.commit()
     return row
+
+
+def get_video_sync_meta(owner_channel_id: str) -> dict[str, Any]:
+    return get_meta(f"{VIDEO_SYNC_META_PREFIX}{owner_channel_id}") or {}
+
+
+def set_video_sync_meta(owner_channel_id: str, value: dict[str, Any]) -> AppMeta:
+    return set_meta(f"{VIDEO_SYNC_META_PREFIX}{owner_channel_id}", value)
 
 
 def sync_model_meta(ml_status: dict[str, Any]) -> AppMeta:

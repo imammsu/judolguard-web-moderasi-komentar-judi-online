@@ -16,7 +16,6 @@ from __future__ import annotations
 import logging
 import secrets
 from typing import Any
-
 from urllib.parse import urlencode
 
 from flask import Blueprint, current_app, g, redirect, request, session, url_for

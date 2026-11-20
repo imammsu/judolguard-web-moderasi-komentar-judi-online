@@ -63,3 +63,27 @@ export interface MeData {
   authenticated: boolean;
   user: UserProfile;
 }
+
+export interface VideoItem {
+  video_id: string;
+  title: string;
+  thumbnail_url: string;
+  published_at: string | null;
+  comment_count: number;
+  last_fetched_at: string | null;
+}
+
+export interface VideosData {
+  items: VideoItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  refreshed: boolean;
+  synced_count: number;
+  sync_mode: 'cache' | 'initial' | 'incremental' | 'full_refresh';
+  new_videos: number;
+  updated_videos: number;
+  metadata_batches: number;
+  estimated_quota: number;
+}
