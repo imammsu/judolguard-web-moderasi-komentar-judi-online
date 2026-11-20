@@ -56,6 +56,23 @@ def get_judol_comments(owner_channel_id: str, video_id: str | None = None) -> li
     return list(db.session.scalars(stmt))
 
 
+def get_extractable_judol_comments(owner_channel_id: str, video_id: str) -> list[Comment]:
+    """Ambil komentar judol yang sudah diklasifikasi dan belum direject."""
+    statement = (
+        select(Comment)
+        .where(
+            Comment.owner_channel_id == owner_channel_id,
+            Comment.video_id == video_id,
+            Comment.zone == "judol",
+            Comment.moderation_status != "rejected",
+            Comment.classified_at.is_not(None),
+            Comment.text_original != "",
+        )
+        .order_by(Comment.published_at.asc().nulls_last(), Comment.comment_id.asc())
+    )
+    return list(db.session.scalars(statement))
+
+
 def count_active_comments_by_video_ids(
     owner_channel_id: str,
     video_ids: list[str] | set[str],

@@ -12,6 +12,8 @@ from flask import Flask
 from ..extensions import db
 from ..ml import get_registry
 from ..repositories import comment_repo, job_repo
+from .extractor import ExtractionInputError, extract_keywords_for_video
+from .llm import LLMExtractionUnavailable
 from .youtube import YouTubeServiceError, fetch_video_comments
 
 logger = logging.getLogger(__name__)
@@ -131,4 +133,92 @@ def submit_scan_job(
         owner_channel_id,
         video_id,
         access_token,
+    )
+
+
+def _run_extract_job(
+    app: Flask,
+    job_id: uuid.UUID,
+    owner_channel_id: str,
+    video_id: str,
+) -> None:
+    with app.app_context():
+        try:
+            job_repo.update_job(job_id, status="running", progress=5)
+
+            def update_progress(processed: int, total: int) -> None:
+                progress = 20 + int(processed / total * 70) if total else 90
+                job_repo.update_job(
+                    job_id,
+                    progress=min(progress, 90),
+                    total=total,
+                    processed=processed,
+                )
+
+            result = extract_keywords_for_video(
+                app,
+                owner_channel_id,
+                video_id,
+                on_progress=update_progress,
+            )
+            logger.info(
+                "Ekstraksi keyword selesai job=%s providers=%s models=%s keywords=%s",
+                job_id,
+                result["providers"],
+                result["models"],
+                result["keyword_count"],
+            )
+            job_repo.update_job(
+                job_id,
+                status="done",
+                progress=100,
+                total=int(result["batch_count"]),
+                processed=int(result["batch_count"]),
+                error=None,
+            )
+        except ExtractionInputError as exc:
+            db.session.rollback()
+            job_repo.update_job(
+                job_id,
+                status="failed",
+                progress=100,
+                error=str(exc),
+            )
+        except LLMExtractionUnavailable:
+            db.session.rollback()
+            job_repo.update_job(
+                job_id,
+                status="failed",
+                progress=100,
+                error="Analisis AI tidak tersedia, coba lagi nanti.",
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Ekstraksi keyword gagal untuk job %s", job_id)
+            db.session.rollback()
+            job_repo.update_job(
+                job_id,
+                status="failed",
+                progress=100,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+        finally:
+            db.session.remove()
+
+
+def submit_extract_job(
+    app: Flask,
+    job_id: uuid.UUID,
+    owner_channel_id: str,
+    video_id: str,
+) -> None:
+    """Jalankan ekstraksi inline saat test atau di worker saat runtime normal."""
+    if app.config.get("TESTING"):
+        _run_extract_job(app, job_id, owner_channel_id, video_id)
+        return
+    _EXECUTOR.submit(
+        _run_extract_job,
+        app,
+        job_id,
+        owner_channel_id,
+        video_id,
     )

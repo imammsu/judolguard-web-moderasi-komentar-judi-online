@@ -17,17 +17,34 @@ def get_job(owner_channel_id: str, job_id: uuid.UUID) -> Job | None:
 
 
 def get_active_scan(owner_channel_id: str, video_id: str) -> Job | None:
+    return get_active_job(owner_channel_id, video_id, "scan")
+
+
+def get_active_job(owner_channel_id: str, video_id: str, job_type: str) -> Job | None:
     stmt = (
         select(Job)
         .where(
             Job.owner_channel_id == owner_channel_id,
             Job.video_id == video_id,
-            Job.type == "scan",
+            Job.type == job_type,
             Job.status.in_(("queued", "running")),
         )
         .order_by(Job.created_at.desc())
     )
     return db.session.scalars(stmt).first()
+
+
+def get_latest_job(owner_channel_id: str, video_id: str, job_type: str) -> Job | None:
+    statement = (
+        select(Job)
+        .where(
+            Job.owner_channel_id == owner_channel_id,
+            Job.video_id == video_id,
+            Job.type == job_type,
+        )
+        .order_by(Job.created_at.desc())
+    )
+    return db.session.scalars(statement).first()
 
 
 def get_latest_scan_statuses(
@@ -55,10 +72,10 @@ def get_latest_scan_statuses(
     return statuses
 
 
-def create_job(owner_channel_id: str, video_id: str) -> Job:
+def create_job(owner_channel_id: str, video_id: str, job_type: str = "scan") -> Job:
     job = Job(
         owner_channel_id=owner_channel_id,
-        type="scan",
+        type=job_type,
         video_id=video_id,
         status="queued",
         progress=0,

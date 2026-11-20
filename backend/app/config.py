@@ -99,10 +99,15 @@ class Config:
         p.strip() for p in _env("LLM_PROVIDER_ORDER", "gemini,groq").split(",") if p.strip()
     ]
     GEMINI_API_KEY = _env("GEMINI_API_KEY")
-    GEMINI_MODEL = _env("GEMINI_MODEL", "gemini-4-hydrogen")
-    GEMINI_FALLBACK_MODEL = _env("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite")
+    GEMINI_MODEL = _env("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    GEMINI_FALLBACK_MODEL = _env("GEMINI_FALLBACK_MODEL", "gemini-3.1-flash-lite")
     GROQ_API_KEY = _env("GROQ_API_KEY")
-    GROQ_MODEL = _env("GROQ_MODEL", "llama-3.3-70b-versatile")
+    GROQ_MODEL = _env("GROQ_MODEL", "qwen/qwen3.8-27b")
+    LLM_EXTRACTION_BATCH_SIZE = _env_int("LLM_EXTRACTION_BATCH_SIZE", 30)
+    LLM_EXTRACTION_MAX_BATCH_SIZE = _env_int("LLM_EXTRACTION_MAX_BATCH_SIZE", 50)
+    LLM_MAX_COMMENT_CHARS = _env_int("LLM_MAX_COMMENT_CHARS", 1000)
+    LLM_REQUEST_TIMEOUT = _env_int("LLM_REQUEST_TIMEOUT", 45)
+    LLM_MAX_RETRIES = _env_int("LLM_MAX_RETRIES", 1)
 
     # Rate limit (Flask-Limiter). Memori proses cukup untuk satu instance.
     RATELIMIT_STORAGE_URI = "memory://"
