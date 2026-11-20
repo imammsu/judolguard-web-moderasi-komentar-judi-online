@@ -28,6 +28,14 @@ def get_video_ids(owner_channel_id: str) -> set[str]:
     return set(db.session.scalars(stmt))
 
 
+def get_video(owner_channel_id: str, video_id: str) -> Video | None:
+    stmt = select(Video).where(
+        Video.owner_channel_id == owner_channel_id,
+        Video.video_id == video_id,
+    )
+    return db.session.scalars(stmt).first()
+
+
 def list_videos(owner_channel_id: str, page: int, page_size: int) -> list[Video]:
     stmt = (
         select(Video)

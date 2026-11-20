@@ -87,3 +87,43 @@ export interface VideosData {
   metadata_batches: number;
   estimated_quota: number;
 }
+
+export interface CommentItem {
+  comment_id: string;
+  video_id: string;
+  author_name: string | null;
+  author_channel_id: string | null;
+  text_original: string;
+  published_at: string | null;
+  like_count: number;
+  zone: 'judol' | 'review' | 'bukan' | null;
+  score: number | null;
+  rule_hit: boolean;
+  model_version: string | null;
+  classified_at: string | null;
+  moderation_status: 'none' | 'rejected' | 'failed';
+}
+
+export interface CommentsData {
+  items: CommentItem[];
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  zone: string | null;
+  search: string | null;
+  sort: string;
+}
+
+export interface JobData {
+  id: string;
+  type: 'scan' | 'fetch' | 'classify' | 'extract';
+  video_id: string | null;
+  status: 'queued' | 'running' | 'done' | 'failed';
+  progress: number;
+  total: number;
+  processed: number;
+  error: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+}

@@ -92,7 +92,10 @@ function formatNumber(value: number) {
 
 function VideoCard({ video }: { video: VideoItem }) {
   return (
-    <article className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
+    <Link
+      to={`/videos/${encodeURIComponent(video.video_id)}`}
+      className="block overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    >
       <div className="aspect-video overflow-hidden bg-slate-100">
         {video.thumbnail_url ? (
           <img
@@ -123,7 +126,7 @@ function VideoCard({ video }: { video: VideoItem }) {
           Pilih video untuk menyiapkan pemindaian komentar
         </div>
       </div>
-    </article>
+    </Link>
   );
 }
 

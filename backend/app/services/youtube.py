@@ -1,8 +1,9 @@
-"""Client ringan YouTube Data API v3 untuk sinkronisasi video channel."""
+"""Client YouTube Data API v3 untuk sinkronisasi video dan komentar."""
 
 from __future__ import annotations
 
 from contextlib import suppress
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -12,6 +13,7 @@ YOUTUBE_API_BASE = "https://www.googleapis.com/youtube/v3"
 YOUTUBE_REQUEST_TIMEOUT = 20
 PLAYLIST_PAGE_SIZE = 50
 VIDEO_BATCH_SIZE = 50
+COMMENT_PAGE_SIZE = 100
 
 
 class YouTubeServiceError(Exception):
@@ -61,6 +63,18 @@ def _error_from_response(response: requests.Response) -> YouTubeServiceError:
             "youtube_quota_exceeded",
             "Kuota YouTube API sedang habis. Coba lagi nanti.",
             429,
+        )
+    if reason == "commentsDisabled":
+        return YouTubeServiceError(
+            "comments_disabled",
+            "Komentar pada video ini dinonaktifkan oleh pemilik channel.",
+            422,
+        )
+    if reason == "videoNotFound":
+        return YouTubeServiceError(
+            "youtube_video_not_found",
+            "Video tidak ditemukan atau tidak dapat diakses.",
+            404,
         )
     if response.status_code == 403:
         return YouTubeServiceError(
@@ -113,6 +127,97 @@ def _get(endpoint: str, access_token: str, params: dict[str, Any]) -> dict[str, 
             502,
         )
     return payload
+
+
+@dataclass(frozen=True)
+class CommentFetchResult:
+    comments: list[dict[str, Any]]
+    pages_fetched: int
+    stopped_on_existing: bool
+
+
+def _comment_from_thread(item: dict[str, Any]) -> dict[str, Any] | None:
+    thread_snippet = item.get("snippet") or {}
+    top_level = thread_snippet.get("topLevelComment") or {}
+    comment_id = top_level.get("id") or item.get("id")
+    if not comment_id:
+        return None
+
+    snippet = top_level.get("snippet") or {}
+    author_channel = snippet.get("authorChannelId") or {}
+    text = snippet.get("textOriginal") or snippet.get("textDisplay") or ""
+    return {
+        "comment_id": str(comment_id),
+        "author_name": str(snippet.get("authorDisplayName") or ""),
+        "author_channel_id": str(author_channel.get("value") or "") or None,
+        "text_original": str(text),
+        "published_at": _parse_datetime(snippet.get("publishedAt")),
+        "like_count": int(snippet.get("likeCount") or 0),
+    }
+
+
+def fetch_video_comments(
+    access_token: str,
+    video_id: str,
+    known_comment_ids: set[str],
+    max_comments: int = 2000,
+    max_pages: int = 20,
+) -> CommentFetchResult:
+    """Ambil komentar top-level terbaru secara incremental."""
+    if not access_token:
+        raise YouTubeServiceError(
+            "youtube_unauthorized",
+            "Token YouTube tidak tersedia. Silakan login kembali.",
+            401,
+        )
+    if not video_id or max_comments < 1 or max_pages < 1:
+        return CommentFetchResult([], 0, False)
+
+    comments: list[dict[str, Any]] = []
+    page_token: str | None = None
+    stopped_on_existing = False
+    pages_fetched = 0
+
+    for _ in range(max_pages):
+        params: dict[str, Any] = {
+            "part": "snippet",
+            "videoId": video_id,
+            "maxResults": min(COMMENT_PAGE_SIZE, max_comments - len(comments)),
+            "order": "time",
+            "textFormat": "plainText",
+            "fields": (
+                "nextPageToken,"
+                "items(id,snippet/topLevelComment(id,snippet("
+                "authorDisplayName,authorChannelId/value,textOriginal,textDisplay,publishedAt,likeCount)))"
+            ),
+        }
+        if page_token:
+            params["pageToken"] = page_token
+
+        payload = _get("commentThreads", access_token, params)
+        pages_fetched += 1
+        for item in payload.get("items") or []:
+            comment = _comment_from_thread(item)
+            if comment is None:
+                continue
+            if comment["comment_id"] in known_comment_ids:
+                stopped_on_existing = True
+                break
+            comments.append(comment)
+            if len(comments) >= max_comments:
+                break
+
+        if stopped_on_existing or len(comments) >= max_comments:
+            break
+        page_token = payload.get("nextPageToken")
+        if not page_token:
+            break
+
+    return CommentFetchResult(
+        comments=comments,
+        pages_fetched=pages_fetched,
+        stopped_on_existing=stopped_on_existing,
+    )
 
 
 def _fetch_uploads_playlist_id(access_token: str) -> str:

@@ -8,8 +8,10 @@ from math import ceil
 from flask import Blueprint, current_app, g, request
 
 from ..auth_guard import login_required
-from ..repositories import meta_repo, video_repo
+from ..extensions import db
+from ..repositories import job_repo, meta_repo, video_repo
 from ..responses import fail, ok
+from ..services.jobs import submit_scan_job
 from ..services.youtube import (
     YouTubeServiceError,
     fetch_channel_videos,
@@ -82,6 +84,21 @@ def _serialize_video(video) -> dict[str, object]:
         "published_at": video.published_at.isoformat() if video.published_at else None,
         "comment_count": video.comment_count,
         "last_fetched_at": video.last_fetched_at.isoformat() if video.last_fetched_at else None,
+    }
+
+
+def _serialize_job(job) -> dict[str, object]:
+    return {
+        "id": str(job.id),
+        "type": job.type,
+        "video_id": job.video_id,
+        "status": job.status,
+        "progress": job.progress,
+        "total": job.total,
+        "processed": job.processed,
+        "error": job.error,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "updated_at": job.updated_at.isoformat() if job.updated_at else None,
     }
 
 
@@ -177,3 +194,37 @@ def list_videos():
             "estimated_quota": estimated_quota,
         }
     )
+
+
+@bp.get("/<video_id>")
+@login_required
+def get_video_detail(video_id: str):
+    video = video_repo.get_video(g.owner_channel_id, video_id)
+    if video is None:
+        return fail("video_not_found", "Video tidak ditemukan.", 404)
+    return ok(_serialize_video(video))
+
+
+@bp.post("/<video_id>/scan")
+@login_required
+def scan_video(video_id: str):
+    video = video_repo.get_video(g.owner_channel_id, video_id)
+    if video is None:
+        return fail("video_not_found", "Video tidak ditemukan.", 404)
+
+    active = job_repo.get_active_scan(g.owner_channel_id, video_id)
+    if active is not None:
+        return ok(_serialize_job(active), 202)
+
+    job = job_repo.create_job(g.owner_channel_id, video_id)
+    submit_scan_job(
+        current_app._get_current_object(),
+        job.id,
+        g.owner_channel_id,
+        video_id,
+        g.current_user.access_token,
+    )
+    if current_app.config.get("TESTING"):
+        db.session.expire_all()
+        job = job_repo.get_job(g.owner_channel_id, job.id) or job
+    return ok(_serialize_job(job), 202)

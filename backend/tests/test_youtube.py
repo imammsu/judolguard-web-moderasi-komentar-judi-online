@@ -60,3 +60,62 @@ def test_incremental_sync_stops_at_known_video_and_details_only_new_video(monkey
     assert calls[0][1]["maxResults"] == 50
     assert calls[1][1]["id"] == "new-video"
     assert responses == []
+
+
+def test_comment_fetch_stops_at_existing_comment(monkeypatch):
+    calls: list[tuple[str, dict]] = []
+    responses = [
+        {
+            "items": [
+                {
+                    "id": "new-comment",
+                    "snippet": {
+                        "topLevelComment": {
+                            "id": "new-comment",
+                            "snippet": {
+                                "authorDisplayName": "Spammer",
+                                "authorChannelId": {"value": "UC_SPAM"},
+                                "textOriginal": "info link gacor",
+                                "publishedAt": "2026-11-20T10:00:00Z",
+                                "likeCount": 4,
+                            },
+                        }
+                    },
+                },
+                {
+                    "id": "known-comment",
+                    "snippet": {
+                        "topLevelComment": {
+                            "id": "known-comment",
+                            "snippet": {
+                                "authorDisplayName": "Penonton",
+                                "textOriginal": "Komentar lama",
+                            },
+                        }
+                    },
+                },
+            ],
+            "nextPageToken": "must-not-be-requested",
+        }
+    ]
+
+    def fake_get(endpoint: str, access_token: str, params: dict):
+        calls.append((endpoint, params))
+        return responses.pop(0)
+
+    monkeypatch.setattr(youtube, "_get", fake_get)
+
+    result = youtube.fetch_video_comments(
+        "access-token",
+        "video-001",
+        {"known-comment"},
+    )
+
+    assert [comment["comment_id"] for comment in result.comments] == ["new-comment"]
+    assert result.comments[0]["author_channel_id"] == "UC_SPAM"
+    assert result.comments[0]["like_count"] == 4
+    assert result.pages_fetched == 1
+    assert result.stopped_on_existing is True
+    assert calls[0][0] == "commentThreads"
+    assert calls[0][1]["maxResults"] == 100
+    assert calls[0][1]["order"] == "time"

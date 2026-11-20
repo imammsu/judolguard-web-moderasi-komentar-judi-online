@@ -73,6 +73,7 @@ class Config:
     MAX_VIDEOS_PER_SYNC = _env_int("MAX_VIDEOS_PER_SYNC", 500)
     MAX_NEW_VIDEOS_PER_SYNC = _env_int("MAX_NEW_VIDEOS_PER_SYNC", 100)
     MAX_INCREMENTAL_PAGES = _env_int("MAX_INCREMENTAL_PAGES", 10)
+    MAX_COMMENT_PAGES_PER_SCAN = _env_int("MAX_COMMENT_PAGES_PER_SCAN", 20)
 
     # Database Supabase - Session Mode Pooler (Part 3, PRD 11.3)
     DATABASE_URL = _normalize_db_url(_env("DATABASE_URL"))
