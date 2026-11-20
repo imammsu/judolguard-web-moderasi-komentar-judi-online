@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
+import { KeywordExtractionPanel } from '../components/KeywordExtractionPanel';
 import { useAuth } from '../hooks/useAuth';
 import { type RejectTarget, useModeration } from '../hooks/useModeration';
 import { useScanJob } from '../hooks/useScanJob';
@@ -105,12 +106,13 @@ function CommentTable({
   selectionResetToken: number;
 }) {
   const [zone, setZone] = useState('all');
+  const [moderationStatus, setModerationStatus] = useState<'active' | 'rejected' | 'all'>('active');
   const [search, setSearch] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [sort, setSort] = useState('score_desc');
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const filters = { zone, search, sort, page, pageSize: 50 };
+  const filters = { zone, moderationStatus, search, sort, page, pageSize: 50 };
   const { data, error, isLoading, isFetching, refetch } = useVideoComments(videoId, filters);
   const selectableIds = (data?.items ?? [])
     .filter((comment) => comment.moderation_status !== 'rejected')
@@ -186,6 +188,20 @@ function CommentTable({
           <option value="newest">Terbaru</option>
           <option value="oldest">Terlama</option>
         </select>
+        <select
+          value={moderationStatus}
+          onChange={(event) => {
+            setPage(1);
+            setModerationStatus(event.target.value as typeof moderationStatus);
+            setSelectedIds(new Set());
+          }}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+          aria-label="Filter status moderasi"
+        >
+          <option value="active">Komentar aktif</option>
+          <option value="rejected">Sudah direject</option>
+          <option value="all">Semua status</option>
+        </select>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3">
         <label className="inline-flex items-center gap-2 text-sm font-medium text-indigo-900">
@@ -226,8 +242,13 @@ function CommentTable({
           </div>
         ) : data?.items.length ? (
           <div className="divide-y divide-slate-100">
-            {data.items.map((comment) => (
-              <article key={comment.comment_id} className="space-y-3 p-5">
+            {data.items.map((comment) => {
+              const rejected = comment.moderation_status === 'rejected';
+              return (
+              <article
+                key={comment.comment_id}
+                className={`space-y-3 border-l-4 p-5 ${rejected ? 'border-l-rose-400 bg-rose-50/60' : 'border-l-transparent bg-white'}`}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <input
@@ -244,6 +265,10 @@ function CommentTable({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${rejected ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                      {rejected && <Ban className="h-3 w-3" />}
+                      {rejected ? 'Sudah direject' : 'Belum direject'}
+                    </span>
                     <ZoneBadge zone={comment.zone} />
                     {comment.score !== null && (
                       <span className="font-mono text-xs text-slate-500">skor {(comment.score * 100).toFixed(1)}%</span>
@@ -254,14 +279,19 @@ function CommentTable({
                 <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
                   <span className="inline-flex items-center gap-1"><Heart className="h-3.5 w-3.5" /> {formatNumber(comment.like_count)} like</span>
                   {comment.rule_hit && <span className="rounded bg-amber-50 px-2 py-1 font-medium text-amber-700">Terkena aturan iklan</span>}
-                  <span>Status: {comment.moderation_status === 'rejected' ? 'Sudah direject' : 'Belum direject'}</span>
+                  {rejected ? (
+                    <span className="font-medium text-rose-700">Komentar disembunyikan dari publik YouTube</span>
+                  ) : (
+                    <span className="font-medium text-emerald-700">Siap dimoderasi</span>
+                  )}
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="px-5 py-16 text-center text-sm text-slate-500">
-            Belum ada komentar yang sesuai filter. Jalankan Scan & Klasifikasi terlebih dahulu.
+            Belum ada komentar yang sesuai filter. Jalankan Scan & Klasifikasi terlebih dahulu atau ubah filter status.
           </div>
         )}
       </div>
@@ -397,6 +427,7 @@ export default function VideoDetailPage() {
       void queryClient.invalidateQueries({ queryKey: ['video-comments', videoId] });
       void queryClient.invalidateQueries({ queryKey: ['video', videoId] });
       void queryClient.invalidateQueries({ queryKey: ['videos'] });
+      void queryClient.invalidateQueries({ queryKey: ['video-keywords', videoId] });
     }
   }, [job?.status, queryClient, videoId]);
 
@@ -477,6 +508,12 @@ export default function VideoDetailPage() {
         </section>
 
         {job && <ScanProgress status={job.status} progress={job.progress} processed={job.processed} total={job.total} error={job.error} />}
+
+        <KeywordExtractionPanel
+          videoId={videoId}
+          scanStatus={video.scan_status}
+          scanRunning={Boolean(running)}
+        />
 
         {moderationResult && (
           <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">

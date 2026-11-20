@@ -5,6 +5,7 @@ import type { CommentsData } from '../types/api';
 
 export interface CommentFilters {
   zone: string;
+  moderationStatus: 'active' | 'rejected' | 'all';
   search: string;
   sort: string;
   page: number;
@@ -16,6 +17,7 @@ export function useVideoComments(videoId: string, filters: CommentFilters, enabl
     page: String(filters.page),
     page_size: String(filters.pageSize),
     sort: filters.sort,
+    moderation_status: filters.moderationStatus,
   });
   if (filters.zone !== 'all') params.set('zone', filters.zone);
   if (filters.search.trim()) params.set('search', filters.search.trim());

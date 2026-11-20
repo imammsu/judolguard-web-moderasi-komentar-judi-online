@@ -137,12 +137,16 @@ def list_video_comments(video_id: str):
     zone = request.args.get("zone") or None
     search = (request.args.get("search") or "").strip() or None
     sort = request.args.get("sort") or "score_desc"
+    moderation_status = request.args.get("moderation_status") or "active"
+    if moderation_status not in {"active", "rejected", "all"}:
+        moderation_status = "active"
     items, total = comment_repo.list_comments(
         g.owner_channel_id,
         video_id,
         zone=zone,
         search=search,
         sort=sort,
+        moderation_status=moderation_status,
         page=page,
         page_size=page_size,
     )
@@ -155,6 +159,7 @@ def list_video_comments(video_id: str):
             zone=zone,
             search=search,
             sort=sort,
+            moderation_status=moderation_status,
             page=page,
             page_size=page_size,
         )
@@ -169,6 +174,7 @@ def list_video_comments(video_id: str):
             "zone": zone,
             "search": search,
             "sort": sort,
+            "moderation_status": moderation_status,
         }
     )
 

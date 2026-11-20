@@ -115,6 +115,7 @@ export interface CommentsData {
   zone: string | null;
   search: string | null;
   sort: string;
+  moderation_status: 'active' | 'rejected' | 'all';
 }
 
 export interface JobData {
@@ -128,6 +129,21 @@ export interface JobData {
   error: string | null;
   created_at: string | null;
   updated_at: string | null;
+}
+
+export interface KeywordItem {
+  id: number;
+  video_id: string;
+  keyword: string;
+  type: 'situs' | 'kata_kunci';
+  frequency: number;
+  extracted_at: string | null;
+}
+
+export interface KeywordsData {
+  video_id: string;
+  total: number;
+  items: KeywordItem[];
 }
 
 export interface RejectPreviewData {

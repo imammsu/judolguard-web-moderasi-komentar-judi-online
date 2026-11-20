@@ -67,7 +67,7 @@ def _seed_video(app, owner: str = "UC_KEYWORD_OWNER") -> None:
                     comment_id="rejected-1",
                     video_id="keyword-video",
                     owner_channel_id=owner,
-                    text_original="Daftar di REJECTED88",
+                    text_original="Daftar di PAS4D",
                     zone="judol",
                     moderation_status="rejected",
                     classified_at=datetime.now(UTC),
@@ -98,9 +98,14 @@ def test_extract_keywords_uses_only_judol_and_persists_frequency(client, app, mo
                         source_id=1,
                         keywords=[
                             ExtractedKeyword(keyword="GACOR77", type="situs"),
-                            ExtractedKeyword(keyword="tidak-ada", type="situs"),
                         ],
-                    )
+                    ),
+                    ExtractedItem(
+                        source_id=2,
+                        keywords=[
+                            ExtractedKeyword(keyword="PAS4D", type="situs"),
+                        ],
+                    ),
                 ]
             ),
             provider="gemini",
@@ -115,12 +120,36 @@ def test_extract_keywords_uses_only_judol_and_persists_frequency(client, app, mo
     keywords = client.get("/api/videos/keyword-video/keywords")
     assert keywords.status_code == 200
     data = keywords.get_json()["data"]
-    assert data["total"] == 1
+    assert data["total"] == 2
     assert data["items"][0]["keyword"] == "GACOR77"
     assert data["items"][0]["frequency"] == 2
+    assert data["items"][1]["keyword"] == "PAS4D"
+    assert data["items"][1]["frequency"] == 1
 
     with app.app_context():
-        assert db.session.query(Keyword).count() == 1
+        assert db.session.query(Keyword).count() == 2
+
+
+def test_comment_list_separates_active_and_rejected(client, app):
+    _authenticate(client)
+    _seed_video(app)
+
+    active = client.get("/api/videos/keyword-video/comments")
+    rejected = client.get(
+        "/api/videos/keyword-video/comments?moderation_status=rejected"
+    )
+    all_comments = client.get(
+        "/api/videos/keyword-video/comments?moderation_status=all"
+    )
+
+    assert active.status_code == 200
+    assert active.get_json()["data"]["total"] == 3
+    assert active.get_json()["data"]["moderation_status"] == "active"
+    assert rejected.status_code == 200
+    assert rejected.get_json()["data"]["total"] == 1
+    assert rejected.get_json()["data"]["items"][0]["moderation_status"] == "rejected"
+    assert all_comments.status_code == 200
+    assert all_comments.get_json()["data"]["total"] == 4
 
 
 def test_extract_keywords_requires_completed_scan(client, app):

@@ -57,14 +57,13 @@ def get_judol_comments(owner_channel_id: str, video_id: str | None = None) -> li
 
 
 def get_extractable_judol_comments(owner_channel_id: str, video_id: str) -> list[Comment]:
-    """Ambil komentar judol yang sudah diklasifikasi dan belum direject."""
+    """Ambil semua komentar judol terklasifikasi, termasuk yang sudah direject."""
     statement = (
         select(Comment)
         .where(
             Comment.owner_channel_id == owner_channel_id,
             Comment.video_id == video_id,
             Comment.zone == "judol",
-            Comment.moderation_status != "rejected",
             Comment.classified_at.is_not(None),
             Comment.text_original != "",
         )
@@ -252,6 +251,7 @@ def list_comments(
     sort: str,
     page: int,
     page_size: int,
+    moderation_status: str = "active",
 ) -> tuple[list[Comment], int]:
     filters = [
         Comment.owner_channel_id == owner_channel_id,
@@ -261,6 +261,10 @@ def list_comments(
         filters.append(Comment.zone == zone)
     if search:
         filters.append(Comment.text_original.ilike(f"%{search}%"))
+    if moderation_status == "active":
+        filters.append(Comment.moderation_status != "rejected")
+    elif moderation_status == "rejected":
+        filters.append(Comment.moderation_status == "rejected")
 
     total = int(
         db.session.scalar(
