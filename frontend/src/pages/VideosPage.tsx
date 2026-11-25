@@ -16,6 +16,7 @@ import { Link } from 'react-router-dom';
 
 import { ApiError } from '../api/client';
 import AppearanceControls from '../components/AppearanceControls';
+import ChatbotPanel from '../components/ChatbotPanel';
 import { useAuth } from '../hooks/useAuth';
 import { useVideos } from '../hooks/useVideos';
 import type { VideoItem } from '../types/api';
@@ -382,6 +383,7 @@ export default function VideosPage() {
         loggingOut={loggingOut}
       />
       <main className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6">
+        <ChatbotPanel />
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
           <div className="flex items-start gap-3">
             <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600" />

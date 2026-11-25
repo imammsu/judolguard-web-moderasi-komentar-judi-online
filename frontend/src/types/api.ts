@@ -146,6 +146,19 @@ export interface KeywordsData {
   items: KeywordItem[];
 }
 
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatResponse {
+  answer: string;
+  tool_used: string[];
+  provider: string | null;
+  model: string | null;
+  fallback: boolean;
+}
+
 export interface RejectPreviewData {
   estimate: {
     comment_count: number;

@@ -6,6 +6,7 @@ from app.services.llm import (
     ExtractedItem,
     ExtractedKeyword,
     ExtractionResponse,
+    GeminiChatClient,
     GeminiClient,
     GroqClient,
     LLMExtractionResult,
@@ -88,6 +89,42 @@ def test_groq_parses_json_object(monkeypatch):
 
     assert result.provider == "groq"
     assert result.response.items[0].keywords[0].type == "situs"
+
+
+def test_gemini_parses_function_call_arguments(monkeypatch):
+    class FakeResponse:
+        ok = True
+        status_code = 200
+
+        def json(self):
+            return {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [
+                                {
+                                    "functionCall": {
+                                        "name": "count_judol",
+                                        "args": {"video_id": "video-1"},
+                                    }
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(
+        "app.services.llm.requests.request",
+        lambda *args, **kwargs: FakeResponse(),
+    )
+    result = GeminiChatClient("key", "gemini-3.5-flash-lite", 5, 0).chat(
+        [{"role": "user", "content": "Berapa komentar judol?"}],
+        [{"name": "count_judol", "parameters": {"type": "OBJECT"}}],
+    )
+
+    assert result.tool_calls[0].name == "count_judol"
+    assert result.tool_calls[0].arguments == {"video_id": "video-1"}
 
 
 def test_fallback_uses_groq_when_gemini_fails(monkeypatch):
