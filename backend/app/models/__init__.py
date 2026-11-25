@@ -3,6 +3,7 @@
 from .entities import (
     AppMeta,
     ChatLog,
+    ChatSession,
     Comment,
     Job,
     Keyword,
@@ -14,6 +15,7 @@ from .entities import (
 __all__ = [
     "AppMeta",
     "ChatLog",
+    "ChatSession",
     "Comment",
     "Job",
     "Keyword",

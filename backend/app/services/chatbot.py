@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from flask import Flask
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from ..models import ChatSession
+from ..repositories import chat_log_repo
 from .chatbot_tools import TOOL_DEFINITIONS, execute_tool
 from .llm import LLMChatUnavailable, chat_with_tools
 
@@ -26,6 +29,8 @@ class ChatRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=1, max_length=MAX_QUESTION_CHARS)
+    session_id: UUID | None = None
+    # Dipertahankan untuk kompatibilitas klien lama; sesi baru memakai session_id.
     video_id: str | None = Field(default=None, max_length=100)
     history: list[ChatHistoryMessage] = Field(default_factory=list)
 
@@ -73,22 +78,43 @@ def run_chat(
     app: Flask,
     owner_channel_id: str,
     request: ChatRequest,
+    session: ChatSession | None = None,
 ) -> ChatResult:
-    history = [
-        message.model_dump()
-        for message in request.history[-MAX_HISTORY_ITEMS:]
-        if message.role in {"user", "assistant"}
-    ]
+    if session is not None:
+        stored_logs = chat_log_repo.list_chat_logs(
+            owner_channel_id,
+            limit=MAX_HISTORY_ITEMS // 2,
+            session_id=session.id,
+        )
+        history = [
+            item
+            for log in reversed(stored_logs)
+            for item in (
+                {"role": "user", "content": log.question},
+                {"role": "assistant", "content": log.answer},
+            )
+        ]
+        video_id = session.video_id
+    else:
+        history = [
+            message.model_dump()
+            for message in request.history[-MAX_HISTORY_ITEMS:]
+            if message.role in {"user", "assistant"}
+        ]
+        video_id = request.video_id
+
+    def execute_scoped_tool(name: str, args: dict[str, object]) -> dict[str, object]:
+        scoped_args = dict(args)
+        if session is not None and session.video_id:
+            scoped_args["video_id"] = session.video_id
+        return execute_tool(owner_channel_id, name, scoped_args)
+
     try:
         answer, tools, provider, model = chat_with_tools(
-            _build_question(request.question, request.video_id),
+            _build_question(request.question, video_id),
             history=history,
             tools=TOOL_DEFINITIONS,
-            execute_tool=lambda name, args: execute_tool(
-                owner_channel_id,
-                name,
-                args,
-            ),
+            execute_tool=execute_scoped_tool,
             provider_order=list(
                 app.config.get("LLM_PROVIDER_ORDER", ["gemini", "groq"])
             ),

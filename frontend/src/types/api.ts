@@ -152,11 +152,45 @@ export interface ChatMessage {
 }
 
 export interface ChatResponse {
+  session_id: string;
   answer: string;
   tool_used: string[];
   provider: string | null;
   model: string | null;
   fallback: boolean;
+}
+
+export interface ChatLogItem {
+  id: number;
+  session_id?: string | null;
+  question: string;
+  tool_used: string[];
+  answer: string;
+  created_at: string | null;
+}
+
+export interface ChatHistoryData {
+  items: ChatLogItem[];
+  total: number;
+}
+
+export interface ChatSession {
+  id: string;
+  video_id: string | null;
+  title: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface ChatSessionsData {
+  items: ChatSession[];
+  total: number;
+}
+
+export interface ChatMessagesData {
+  session_id: string;
+  items: ChatLogItem[];
+  total: number;
 }
 
 export interface RejectPreviewData {

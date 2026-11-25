@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from app.extensions import db
-from app.models import Comment, Keyword, Video
+from app.models import ChatLog, ChatSession, Comment, Keyword, Video
 from app.services.chatbot_tools import count_judol, top_spammers
 from app.services.llm import LLMChatUnavailable
 from app.services.session_store import session_store
@@ -120,6 +120,18 @@ def test_chat_endpoint_returns_answer_without_exposing_provider_error(
     assert data["answer"].startswith("Akun UC_SPAMMER")
     assert data["tool_used"] == ["top_spammers"]
     assert data["provider"] == "gemini"
+    with app.app_context():
+        log = db.session.query(ChatLog).one()
+        assert log.owner_channel_id == "UC_CHAT_OWNER"
+        assert log.question == "Akun mana yang paling sering spam?"
+        assert log.tool_used == "top_spammers"
+
+    history = client.get("/api/chat/history")
+    assert history.status_code == 200
+    history_data = history.get_json()["data"]
+    assert history_data["total"] == 1
+    assert history_data["items"][0]["question"] == "Akun mana yang paling sering spam?"
+    assert history_data["items"][0]["tool_used"] == ["top_spammers"]
 
 
 def test_chat_endpoint_validates_request(client):
@@ -149,3 +161,44 @@ def test_chat_endpoint_uses_safe_fallback_when_providers_fail(
     data = response.get_json()["data"]
     assert data["fallback"] is True
     assert "tidak tersedia" in data["answer"].lower()
+
+
+def test_chat_sessions_isolate_messages_by_owner_and_session(client, app, monkeypatch):
+    _authenticate(client)
+    _seed_chat_data(app)
+    monkeypatch.setattr(
+        "app.services.chatbot.chat_with_tools",
+        lambda *args, **kwargs: (
+            "Jawaban sesi.",
+            ["count_judol"],
+            "gemini",
+            "gemini-test",
+        ),
+    )
+
+    created = client.post("/api/chat/sessions", json={"video_id": "chat-video"})
+    assert created.status_code == 201
+    session = created.get_json()["data"]
+    session_id = session["id"]
+    assert session["video_id"] == "chat-video"
+
+    response = client.post(
+        "/api/chat",
+        json={"session_id": session_id, "question": "Berapa jumlah komentar judol?"},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["data"]["session_id"] == session_id
+
+    messages = client.get(f"/api/chat/sessions/{session_id}/messages")
+    assert messages.status_code == 200
+    assert messages.get_json()["data"]["total"] == 1
+
+    other_client = app.test_client()
+    _authenticate(other_client, "UC_OTHER_OWNER")
+    assert other_client.get(f"/api/chat/sessions/{session_id}/messages").status_code == 404
+    assert other_client.delete(f"/api/chat/sessions/{session_id}").status_code == 404
+
+    with app.app_context():
+        assert db.session.query(ChatSession).count() == 1
+        log = db.session.query(ChatLog).one()
+        assert log.session_id is not None

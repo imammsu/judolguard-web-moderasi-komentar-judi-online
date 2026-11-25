@@ -56,4 +56,5 @@ export const api = {
   get: <T>(path: string) => apiFetch<T>(path),
   post: <T>(path: string, data?: unknown) =>
     apiFetch<T>(path, { method: 'POST', body: data === undefined ? undefined : JSON.stringify(data) }),
+  delete: <T>(path: string) => apiFetch<T>(path, { method: 'DELETE' }),
 };

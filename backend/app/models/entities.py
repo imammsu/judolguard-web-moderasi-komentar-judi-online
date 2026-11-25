@@ -1,4 +1,4 @@
-"""Model SQLAlchemy untuk seluruh 8 tabel JudolGuard (PRD Bagian 11.1 & 11.2)."""
+"""Model SQLAlchemy untuk seluruh tabel JudolGuard (PRD Bagian 11.1 & 11.2)."""
 
 from __future__ import annotations
 
@@ -219,13 +219,58 @@ class Job(db.Model):
     )
 
 
+class ChatSession(db.Model):
+    """Tabel `chat_sessions` — percakapan chatbot per video atau channel."""
+
+    __tablename__ = "chat_sessions"
+    __table_args__ = (
+        Index("ix_chat_sessions_owner_updated", "owner_channel_id", "updated_at"),
+        Index("ix_chat_sessions_owner_video", "owner_channel_id", "video_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    owner_channel_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("users.channel_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    video_id: Mapped[str | None] = mapped_column(
+        Text,
+        ForeignKey("videos.video_id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, default=utc_now, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
 class ChatLog(db.Model):
     """Tabel `chat_logs` — riwayat tanya-jawab chatbot analisis spam."""
 
     __tablename__ = "chat_logs"
-    __table_args__ = (Index("ix_chat_logs_owner_channel_id", "owner_channel_id"),)
+    __table_args__ = (
+        Index("ix_chat_logs_owner_channel_id", "owner_channel_id"),
+        Index("ix_chat_logs_session_created", "session_id", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="CASCADE"),
+        nullable=True,
+    )
     owner_channel_id: Mapped[str] = mapped_column(
         Text,
         ForeignKey("users.channel_id", ondelete="CASCADE"),
