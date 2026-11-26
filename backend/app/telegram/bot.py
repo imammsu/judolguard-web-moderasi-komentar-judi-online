@@ -18,9 +18,14 @@ from telegram.ext import (
 from ..sentinel.scheduler import PatrolScheduler
 from .commands import (
     PLANNED_COMMANDS,
+    disconnect_command,
     help_command,
-    not_ready_command,
+    pause_command,
+    resume_command,
     start_command,
+    stats_command,
+    status_command,
+    topspammer_command,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,9 +90,18 @@ def build_application(token: str, flask_app: Any | None = None) -> Application:
         application.bot_data["flask_app"] = flask_app
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("bantuan", help_command))
+    command_handlers = {
+        "status": status_command,
+        "stats": stats_command,
+        "topspammer": topspammer_command,
+        "pause": pause_command,
+        "resume": resume_command,
+        "putuskan": disconnect_command,
+    }
     for command, _description in PLANNED_COMMANDS:
-        if command not in {"start", "bantuan"}:
-            application.add_handler(CommandHandler(command, not_ready_command))
+        handler = command_handlers.get(command)
+        if handler is not None:
+            application.add_handler(CommandHandler(command, handler))
     application.add_error_handler(_error_handler)
     return application
 

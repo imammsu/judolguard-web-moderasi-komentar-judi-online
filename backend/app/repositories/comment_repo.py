@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, select, update
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
@@ -77,6 +77,73 @@ def get_judol_comments(owner_channel_id: str, video_id: str | None = None) -> li
         filters.append(Comment.video_id == video_id)
     stmt = select(Comment).where(*filters).order_by(Comment.score.desc().nulls_last())
     return list(db.session.scalars(stmt))
+
+
+def count_today_judol(owner_channel_id: str, start_at: datetime) -> int:
+    statement = select(func.count(Comment.comment_id)).where(
+        Comment.owner_channel_id == owner_channel_id,
+        Comment.zone == "judol",
+        Comment.moderation_status != "rejected",
+        Comment.published_at >= start_at,
+    )
+    return int(db.session.scalar(statement) or 0)
+
+
+def get_video_stats(owner_channel_id: str) -> list[dict[str, Any]]:
+    """Ringkasan komentar per video milik channel tertentu."""
+    judol_count = func.sum(case((Comment.zone == "judol", 1), else_=0))
+    review_count = func.sum(case((Comment.zone == "review", 1), else_=0))
+    normal_count = func.sum(case((Comment.zone == "bukan", 1), else_=0))
+    statement = (
+        select(
+            Comment.video_id,
+            judol_count.label("judol_count"),
+            review_count.label("review_count"),
+            normal_count.label("normal_count"),
+        )
+        .where(
+            Comment.owner_channel_id == owner_channel_id,
+            Comment.moderation_status != "rejected",
+        )
+        .group_by(Comment.video_id)
+        .order_by(judol_count.desc(), Comment.video_id.asc())
+    )
+    return [
+        {
+            "video_id": video_id,
+            "judol_count": int(judol or 0),
+            "review_count": int(review or 0),
+            "normal_count": int(normal or 0),
+        }
+        for video_id, judol, review, normal in db.session.execute(statement)
+    ]
+
+
+def get_top_spammers(owner_channel_id: str, limit: int = 10) -> list[dict[str, Any]]:
+    spammer_key = func.coalesce(Comment.author_channel_id, Comment.author_name)
+    statement = (
+        select(
+            spammer_key.label("spammer_key"),
+            func.max(Comment.author_name).label("author_name"),
+            func.count(Comment.comment_id).label("comment_count"),
+        )
+        .where(
+            Comment.owner_channel_id == owner_channel_id,
+            Comment.zone == "judol",
+            Comment.moderation_status != "rejected",
+        )
+        .group_by(spammer_key)
+        .order_by(func.count(Comment.comment_id).desc())
+        .limit(max(1, int(limit)))
+    )
+    return [
+        {
+            "author_channel_id": spammer_key,
+            "author_name": author_name or "Akun tanpa nama",
+            "comment_count": int(comment_count),
+        }
+        for spammer_key, author_name, comment_count in db.session.execute(statement)
+    ]
 
 
 def get_extractable_judol_comments(owner_channel_id: str, video_id: str) -> list[Comment]:

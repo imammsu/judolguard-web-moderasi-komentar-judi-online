@@ -22,6 +22,35 @@ def get_link_by_chat_id(chat_id: int) -> TelegramLink | None:
     ).first()
 
 
+def get_owner_by_chat_id(chat_id: int) -> tuple[User, TelegramLink] | None:
+    """Ambil user dan link yang hanya dimiliki chat Telegram tersebut."""
+    statement = (
+        select(User, TelegramLink)
+        .join(TelegramLink, TelegramLink.user_id == User.id)
+        .where(TelegramLink.chat_id == chat_id)
+    )
+    return db.session.execute(statement).first()
+
+
+def set_paused_by_chat_id(chat_id: int, paused: bool) -> bool:
+    link = get_link_by_chat_id(chat_id)
+    if link is None:
+        return False
+    link.paused = paused
+    link.updated_at = datetime.now(UTC)
+    db.session.commit()
+    return True
+
+
+def unlink_by_chat_id(chat_id: int) -> bool:
+    link = get_link_by_chat_id(chat_id)
+    if link is None:
+        return False
+    db.session.delete(link)
+    db.session.commit()
+    return True
+
+
 def list_active_users() -> list[User]:
     """Ambil user yang Telegram-nya terhubung dan tidak sedang dijeda."""
     statement = (

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from ..extensions import db
 from ..models import MonitoredVideo
@@ -50,3 +50,15 @@ def mark_checked(
     checked_at: datetime | None = None,
 ) -> None:
     monitored.last_checked_at = checked_at or datetime.now(UTC)
+
+
+def get_user_monitor_summary(user_id: int) -> tuple[int, datetime | None]:
+    statement = select(
+        func.count(MonitoredVideo.id),
+        func.max(MonitoredVideo.last_checked_at),
+    ).where(
+        MonitoredVideo.user_id == user_id,
+        MonitoredVideo.active.is_(True),
+    )
+    count, last_checked_at = db.session.execute(statement).one()
+    return int(count or 0), last_checked_at

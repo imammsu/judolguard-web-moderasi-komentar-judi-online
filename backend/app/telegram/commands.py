@@ -3,12 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
-from typing import Final
+from datetime import UTC, datetime
+from typing import Any, Final
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ..repositories import (
+    comment_repo,
+    monitored_video_repo,
+    patrol_repo,
+    telegram_repo,
+    video_repo,
+)
 from ..services.telegram_pairing import PairingError, consume_pairing_token
 
 logger = logging.getLogger(__name__)
@@ -20,8 +29,8 @@ HELP_TEXT: Final = """Perintah JudolGuard Sentinel:
 /status - Melihat status patroli
 /stats - Melihat statistik komentar
 /topspammer - Melihat akun spam terbanyak
-/pause - Menjeda patroli
-/resume - Melanjutkan patroli
+/pause - Menjeda patroli dan notifikasi
+/resume - Melanjutkan patroli dan notifikasi
 /putuskan - Memutuskan akun Telegram
 """
 
@@ -90,11 +99,237 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Tampilkan daftar command yang tersedia dan yang akan datang."""
+    """Tampilkan daftar command Sentinel."""
     del context
     message = update.effective_message
     if message is not None:
         await message.reply_text(HELP_TEXT)
+
+
+def _get_flask_app(context: ContextTypes.DEFAULT_TYPE) -> Any | None:
+    application = getattr(context, "application", None)
+    return getattr(application, "bot_data", {}).get("flask_app")
+
+
+def _get_chat_id(update: Update) -> int | None:
+    chat = getattr(update, "effective_chat", None)
+    return int(chat.id) if chat is not None else None
+
+
+def _owner_for_chat(app: Any, chat_id: int) -> dict[str, Any] | None:
+    with app.app_context():
+        pair = telegram_repo.get_owner_by_chat_id(chat_id)
+        if pair is None:
+            return None
+        user, link = pair
+        return {
+            "user_id": user.id,
+            "channel_id": user.channel_id,
+            "paused": bool(link.paused),
+            "chat_id": link.chat_id,
+        }
+
+
+async def _require_owner(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> tuple[Any, int, dict[str, Any]] | None:
+    message = update.effective_message
+    chat_id = _get_chat_id(update)
+    app = _get_flask_app(context)
+    if message is None or chat_id is None or app is None:
+        if message is not None:
+            await message.reply_text(
+                "Command belum dapat diproses karena worker belum terhubung "
+                "ke aplikasi JudolGuard."
+            )
+        return None
+
+    owner = await asyncio.to_thread(_owner_for_chat, app, chat_id)
+    if owner is None:
+        await message.reply_text(
+            "Telegram belum terhubung ke JudolGuard. "
+            "Gunakan tombol Hubungkan Telegram dari web."
+        )
+        return None
+    return app, chat_id, owner
+
+
+def _status_data(app: Any, owner: dict[str, Any]) -> dict[str, Any]:
+    with app.app_context():
+        video_count, last_checked = monitored_video_repo.get_user_monitor_summary(
+            owner["user_id"]
+        )
+        latest_run = patrol_repo.get_latest_patrol_run(owner["user_id"])
+        today = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        return {
+            "paused": owner["paused"],
+            "video_count": video_count,
+            "last_checked": last_checked,
+            "judol_today": comment_repo.count_today_judol(owner["channel_id"], today),
+            "latest_error": latest_run.error if latest_run else None,
+            "interval": int(app.config.get("SENTINEL_POLL_INTERVAL_SECONDS", 300)),
+        }
+
+
+def _stats_data(app: Any, owner: dict[str, Any]) -> list[dict[str, Any]]:
+    with app.app_context():
+        rows = comment_repo.get_video_stats(owner["channel_id"])
+        for row in rows:
+            video = video_repo.get_video_by_id(row["video_id"])
+            row["title"] = video.title if video and video.title else row["video_id"]
+        return rows
+
+
+def _top_spammer_data(app: Any, owner: dict[str, Any]) -> list[dict[str, Any]]:
+    with app.app_context():
+        return comment_repo.get_top_spammers(owner["channel_id"], limit=10)
+
+
+def _format_time(value: datetime | None) -> str:
+    if value is None:
+        return "Belum ada pemeriksaan"
+    return value.astimezone(UTC).strftime("%d %b %Y %H:%M UTC")
+
+
+async def _reply_html(message: Any, text: str) -> None:
+    max_length = 3900
+    if len(text) <= max_length:
+        await message.reply_text(text, parse_mode="HTML")
+        return
+    lines: list[str] = []
+    current = ""
+    for line in text.splitlines():
+        if current and len(current) + len(line) + 1 > max_length:
+            lines.append(current)
+            current = ""
+        current = f"{current}\n{line}".strip()
+    if current:
+        lines.append(current)
+    for chunk in lines:
+        await message.reply_text(chunk, parse_mode="HTML")
+
+
+async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    required = await _require_owner(update, context)
+    if required is None:
+        return
+    app, _chat_id, owner = required
+    message = update.effective_message
+    data = await asyncio.to_thread(_status_data, app, owner)
+    state = "Dijeda" if data["paused"] else "Aktif"
+    text = (
+        "📊 <b>Status JudolGuard</b>\n\n"
+        f"Patroli: <b>{state}</b>\n"
+        f"Video dipantau: <b>{data['video_count']}</b>\n"
+        f"Pemeriksaan terakhir: <b>{_format_time(data['last_checked'])}</b>\n"
+        f"Komentar judol hari ini: <b>{data['judol_today']}</b>\n"
+        f"Interval: <b>{data['interval']} detik</b>"
+    )
+    if data["latest_error"]:
+        text += "\nStatus terakhir: <b>terdapat error</b>"
+    await _reply_html(message, text)
+
+
+async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    required = await _require_owner(update, context)
+    if required is None:
+        return
+    app, _chat_id, owner = required
+    message = update.effective_message
+    rows = await asyncio.to_thread(_stats_data, app, owner)
+    if not rows:
+        await message.reply_text("Belum ada statistik komentar.")
+        return
+
+    lines = ["📈 <b>Statistik Komentar</b>", ""]
+    for index, row in enumerate(rows, start=1):
+        title = html.escape(str(row["title"]))
+        lines.extend(
+            [
+                f"<b>{index}. {title}</b>",
+                f"🔴 Judol: {row['judol_count']}",
+                f"🟡 Review: {row['review_count']}",
+                f"🟢 Normal: {row['normal_count']}",
+                "",
+            ]
+        )
+    await _reply_html(message, "\n".join(lines).rstrip())
+
+
+async def topspammer_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    required = await _require_owner(update, context)
+    if required is None:
+        return
+    app, _chat_id, owner = required
+    message = update.effective_message
+    rows = await asyncio.to_thread(_top_spammer_data, app, owner)
+    if not rows:
+        await message.reply_text("Belum ada akun spam terdeteksi.")
+        return
+
+    lines = ["🏆 <b>Top Spammer</b>", ""]
+    for index, row in enumerate(rows, start=1):
+        name = html.escape(str(row["author_name"]))
+        lines.append(f"{index}. {name} — <b>{row['comment_count']}</b> komentar")
+    await _reply_html(message, "\n".join(lines))
+
+
+async def _set_pause_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    paused: bool,
+) -> None:
+    required = await _require_owner(update, context)
+    if required is None:
+        return
+    app, chat_id, _owner = required
+    message = update.effective_message
+
+    def update_link() -> bool:
+        with app.app_context():
+            return telegram_repo.set_paused_by_chat_id(chat_id, paused)
+
+    updated = await asyncio.to_thread(update_link)
+    if not updated:
+        await message.reply_text("Link Telegram tidak ditemukan.")
+        return
+    if paused:
+        await message.reply_text(
+            "Patroli dan notifikasi dijeda. Pairing Telegram tetap tersimpan."
+        )
+    else:
+        await message.reply_text("Patroli dan notifikasi dilanjutkan.")
+
+
+async def pause_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _set_pause_command(update, context, paused=True)
+
+
+async def resume_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _set_pause_command(update, context, paused=False)
+
+
+async def disconnect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    required = await _require_owner(update, context)
+    if required is None:
+        return
+    app, chat_id, _owner = required
+    message = update.effective_message
+
+    def unlink() -> bool:
+        with app.app_context():
+            return telegram_repo.unlink_by_chat_id(chat_id)
+
+    removed = await asyncio.to_thread(unlink)
+    if removed:
+        await message.reply_text(
+            "Telegram berhasil diputuskan dari JudolGuard. "
+            "Lakukan pairing ulang dari web jika ingin menghubungkan kembali."
+        )
+    else:
+        await message.reply_text("Link Telegram tidak ditemukan.")
 
 
 async def not_ready_command(

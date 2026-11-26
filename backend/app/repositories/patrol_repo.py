@@ -47,3 +47,13 @@ def record_notification_delivery(
     if error:
         run.error = f"{run.error}; {error}" if run.error else error
     db.session.commit()
+
+
+def get_latest_patrol_run(user_id: int) -> PatrolRun | None:
+    statement = (
+        select(PatrolRun)
+        .where(PatrolRun.user_id == user_id)
+        .order_by(PatrolRun.run_at.desc(), PatrolRun.id.desc())
+        .limit(1)
+    )
+    return db.session.scalars(statement).first()
