@@ -18,7 +18,7 @@ from ..repositories import (
     telegram_repo,
     video_repo,
 )
-from ..services import google_token, youtube
+from ..services import comment_classifier, google_token, youtube
 from ..services.google_token import (
     GoogleTokenError,
     InvalidGrantError,
@@ -36,6 +36,7 @@ class PatrolUserSummary:
     videos_checked: int = 0
     est_api_units: int = 0
     new_comments: int = 0
+    classified_comments: int = 0
     error: str | None = None
 
 
@@ -44,6 +45,7 @@ class PatrolCycleSummary:
     users_checked: int = 0
     videos_checked: int = 0
     new_comments: int = 0
+    classified_comments: int = 0
     errors: list[str] = field(default_factory=list)
     skipped_locked: bool = False
 
@@ -59,6 +61,38 @@ def _video_api_units(video_count: int) -> int:
     if video_count <= 0:
         return 2
     return 2 + ceil(video_count / youtube.VIDEO_BATCH_SIZE)
+
+
+def _append_error(summary: PatrolUserSummary, message: str) -> None:
+    summary.error = f"{summary.error}; {message}" if summary.error else message
+
+
+def _classify_pending(
+    *,
+    app: Flask,
+    user: User,
+    video_id: str,
+    summary: PatrolUserSummary,
+) -> None:
+    try:
+        summary.classified_comments += comment_classifier.classify_pending_comments(
+            user.channel_id,
+            video_id,
+            batch_size=int(app.config.get("SENTINEL_CLASSIFICATION_BATCH_SIZE", 100)),
+            max_comments=int(
+                app.config.get("SENTINEL_MAX_CLASSIFICATIONS_PER_CYCLE", 500)
+            ),
+        )
+    except Exception as error:  # noqa: BLE001
+        from ..extensions import db
+
+        db.session.rollback()
+        _append_error(summary, f"{video_id}: klasifikasi gagal ({type(error).__name__})")
+        logger.exception(
+            "Klasifikasi komentar gagal; user_id=%s video_id=%s",
+            user.id,
+            video_id,
+        )
 
 
 def _commit_monitor_change() -> None:
@@ -115,11 +149,13 @@ def _process_video(
     if monitored.last_comment_count is None:
         monitored_video_repo.update_baseline(monitored, current_count)
         _commit_monitor_change()
+        _classify_pending(app=app, user=user, video_id=video_id, summary=summary)
         return
 
     if monitored.last_comment_count == current_count:
         monitored_video_repo.mark_checked(monitored)
         _commit_monitor_change()
+        _classify_pending(app=app, user=user, video_id=video_id, summary=summary)
         return
 
     known_comment_ids = comment_repo.get_comment_ids(user.channel_id, video_id)
@@ -135,11 +171,8 @@ def _process_video(
         if error.code == "comments_disabled":
             monitored_video_repo.update_baseline(monitored, current_count)
             _commit_monitor_change()
-            summary.error = (
-                f"{summary.error}; {video_id}: comments_disabled"
-                if summary.error
-                else f"{video_id}: comments_disabled"
-            )
+            _append_error(summary, f"{video_id}: comments_disabled")
+            _classify_pending(app=app, user=user, video_id=video_id, summary=summary)
             return
         raise
 
@@ -152,6 +185,7 @@ def _process_video(
     summary.est_api_units += fetched.pages_fetched
     monitored_video_repo.update_baseline(monitored, current_count)
     _commit_monitor_change()
+    _classify_pending(app=app, user=user, video_id=video_id, summary=summary)
 
 
 def _process_user(app: Flask, user: User) -> PatrolUserSummary:
@@ -202,11 +236,7 @@ def _process_user(app: Flask, user: User) -> PatrolUserSummary:
 
                 db.session.rollback()
                 text = _error_text(error)
-                summary.error = (
-                    f"{summary.error}; {video.get('video_id')}: {text}"
-                    if summary.error
-                    else f"{video.get('video_id')}: {text}"
-                )
+                _append_error(summary, f"{video.get('video_id')}: {text}")
                 logger.exception(
                     "Patroli video gagal; user_id=%s video_id=%s",
                     user.id,
@@ -249,6 +279,7 @@ def run_patrol_cycle(app: Flask) -> PatrolCycleSummary:
 
                 result.videos_checked += user_summary.videos_checked
                 result.new_comments += user_summary.new_comments
+                result.classified_comments += user_summary.classified_comments
                 if user_summary.error:
                     result.errors.append(f"user_id={user.id}: {user_summary.error}")
     finally:

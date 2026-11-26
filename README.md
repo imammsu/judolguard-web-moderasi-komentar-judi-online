@@ -109,8 +109,9 @@ Setelah mengubah `.env`, restart backend. Status tiap kredensial terlihat di kar
 ### 5. JudolGuard Sentinel (Telegram)
 
 Sentinel menjalankan bot Telegram dan scheduler patroli sebagai worker
-terpisah. Scheduler membuat baseline video dan mengambil komentar baru secara
-incremental; klasifikasi dan notifikasi akan ditambahkan pada tahap berikutnya.
+terpisah. Scheduler membuat baseline video, mengambil komentar baru secara
+incremental, dan mengklasifikasikannya; notifikasi akan ditambahkan pada tahap
+berikutnya.
 
 ```env
 TELEGRAM_BOT_TOKEN=
@@ -119,6 +120,8 @@ TELEGRAM_WEB_BASE_URL=http://localhost:5173
 SENTINEL_ENABLED=false
 SENTINEL_POLL_INTERVAL_SECONDS=300
 SENTINEL_MAX_VIDEOS=5
+SENTINEL_CLASSIFICATION_BATCH_SIZE=100
+SENTINEL_MAX_CLASSIFICATIONS_PER_CYCLE=500
 PAIRING_TOKEN_TTL_SECONDS=600
 SENTINEL_MIN_ALERT_COUNT=1
 TELEGRAM_MAX_MESSAGES_PER_MINUTE=10

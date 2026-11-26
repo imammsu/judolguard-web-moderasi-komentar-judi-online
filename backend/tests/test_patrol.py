@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from app.extensions import db
+from app.ml.loader import ClassificationResult
 from app.models import Comment, MonitoredVideo, PatrolRun, TelegramLink, User, Video
 from app.repositories import user_repo
 from app.sentinel.patrol import _PATROL_LOCK, run_patrol_cycle
@@ -126,6 +127,24 @@ def test_unchanged_count_skips_comment_api_and_changed_count_is_incremental(
         "app.sentinel.patrol.youtube.fetch_video_comments",
         fake_fetch_comments,
     )
+    class FakeRegistry:
+        def classify_array(self, texts):
+            assert texts == ["komentar baru"]
+            return [
+                ClassificationResult(
+                    text_prepared="komentar baru",
+                    text_hash="c" * 64,
+                    score=0.91,
+                    zone="judol",
+                    rule_hit=False,
+                    model_version="test-model",
+                )
+            ]
+
+    monkeypatch.setattr(
+        "app.services.comment_classifier.get_registry",
+        lambda: FakeRegistry(),
+    )
 
     run_patrol_cycle(app)
     run_patrol_cycle(app)
@@ -141,7 +160,8 @@ def test_unchanged_count_skips_comment_api_and_changed_count_is_incremental(
         assert monitored.last_comment_count == 3
         comment = db.session.query(Comment).one()
         assert comment.comment_id == "comment-new"
-        assert comment.zone is None
+        assert comment.zone == "judol"
+        assert comment.model_version == "test-model"
         assert comment.notified is False
         assert db.session.query(PatrolRun).count() == 3
 
