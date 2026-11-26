@@ -18,5 +18,6 @@ google-api-python-client>=2.150,<3
 cryptography>=43,<46
 pydantic>=2.9,<3
 requests>=2.32,<3
+python-telegram-bot>=21.7,<23
 
 gunicorn>=23,<24; sys_platform != "win32"

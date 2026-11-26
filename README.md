@@ -120,12 +120,25 @@ SENTINEL_MAX_VIDEOS=5
 PAIRING_TOKEN_TTL_SECONDS=600
 SENTINEL_MIN_ALERT_COUNT=1
 TELEGRAM_MAX_MESSAGES_PER_MINUTE=10
+TELEGRAM_POLLING_TIMEOUT=30
 ```
 
 Untuk deployment, jalankan API Flask dan Sentinel Worker sebagai proses
 terpisah pada hosting yang mendukung proses selalu aktif seperti Railway atau
 Render Background Worker. Scheduler tidak boleh dijalankan di setiap instance
 API agar satu siklus patroli tidak berjalan ganda.
+
+Pada Tahap 2, worker Telegram dapat diuji secara lokal dengan:
+
+```powershell
+cd backend
+$env:TELEGRAM_BOT_TOKEN="TOKEN_DARI_BOTFATHER"
+$env:SENTINEL_ENABLED="true"
+.venv\Scripts\python.exe sentinel_worker.py
+```
+
+Token bot dibuat melalui akun `@BotFather` di Telegram menggunakan perintah
+`/newbot`. Simpan token hanya di environment variable dan jangan commit ke Git.
 
 ## Aturan commit & branch
 

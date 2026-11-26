@@ -120,6 +120,7 @@ class Config:
     TELEGRAM_MAX_MESSAGES_PER_MINUTE = _env_int(
         "TELEGRAM_MAX_MESSAGES_PER_MINUTE", 10
     )
+    TELEGRAM_POLLING_TIMEOUT = _env_int("TELEGRAM_POLLING_TIMEOUT", 30)
 
     # Rate limit (Flask-Limiter). Memori proses cukup untuk satu instance.
     RATELIMIT_STORAGE_URI = "memory://"
