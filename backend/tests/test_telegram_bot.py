@@ -35,7 +35,7 @@ def test_start_without_token_explains_pairing():
 
 def test_start_with_token_does_not_pair_before_stage_three():
     message = _run(start_command, ["temporary-token"])
-    assert "fitur pairing belum tersedia" in message.responses[0]
+    assert "Pairing belum dapat diproses" in message.responses[0]
 
 
 def test_help_lists_sentinel_commands():

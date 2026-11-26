@@ -113,6 +113,7 @@ terpisah pada tahap implementasi berikutnya. Konfigurasi dasarnya:
 
 ```env
 TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=
 TELEGRAM_WEB_BASE_URL=http://localhost:5173
 SENTINEL_ENABLED=false
 SENTINEL_POLL_INTERVAL_SECONDS=300
@@ -133,6 +134,7 @@ Pada Tahap 2, worker Telegram dapat diuji secara lokal dengan:
 ```powershell
 cd backend
 $env:TELEGRAM_BOT_TOKEN="TOKEN_DARI_BOTFATHER"
+$env:TELEGRAM_BOT_USERNAME="USERNAME_BOT_TANPA_AT"
 $env:SENTINEL_ENABLED="true"
 .venv\Scripts\python.exe sentinel_worker.py
 ```

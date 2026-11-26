@@ -111,6 +111,7 @@ class Config:
 
     # JudolGuard Sentinel (Telegram patrol; worker diimplementasikan pada tahap berikutnya).
     TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN")
+    TELEGRAM_BOT_USERNAME = _env("TELEGRAM_BOT_USERNAME")
     TELEGRAM_WEB_BASE_URL = _env("TELEGRAM_WEB_BASE_URL", "http://localhost:5173")
     SENTINEL_ENABLED = _env("SENTINEL_ENABLED", "false").lower() in {"1", "true", "yes"}
     SENTINEL_POLL_INTERVAL_SECONDS = _env_int("SENTINEL_POLL_INTERVAL_SECONDS", 300)

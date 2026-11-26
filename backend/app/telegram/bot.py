@@ -52,7 +52,7 @@ async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
-def build_application(token: str) -> Application:
+def build_application(token: str, flask_app: Any | None = None) -> Application:
     """Buat aplikasi Telegram tanpa memanggil API network."""
     cleaned_token = _validate_token(token)
     application = (
@@ -61,6 +61,8 @@ def build_application(token: str) -> Application:
         .post_init(_post_init)
         .build()
     )
+    if flask_app is not None:
+        application.bot_data["flask_app"] = flask_app
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("bantuan", help_command))
     for command, _description in PLANNED_COMMANDS:
@@ -70,7 +72,7 @@ def build_application(token: str) -> Application:
     return application
 
 
-def run_bot(config: Mapping[str, Any]) -> None:
+def run_bot(config: Mapping[str, Any], flask_app: Any | None = None) -> None:
     """Jalankan long polling sampai menerima sinyal shutdown."""
     if not config.get("SENTINEL_ENABLED", False):
         raise RuntimeError(
@@ -78,7 +80,10 @@ def run_bot(config: Mapping[str, Any]) -> None:
             "untuk menjalankan bot Telegram."
         )
 
-    application = build_application(str(config.get("TELEGRAM_BOT_TOKEN") or ""))
+    application = build_application(
+        str(config.get("TELEGRAM_BOT_TOKEN") or ""),
+        flask_app=flask_app,
+    )
     logger.info(
         "Memulai JudolGuard Sentinel Telegram dengan polling timeout=%s detik.",
         config.get("TELEGRAM_POLLING_TIMEOUT", 30),

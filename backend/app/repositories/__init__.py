@@ -8,6 +8,7 @@ from . import (
     keyword_repo,
     meta_repo,
     moderation_repo,
+    telegram_repo,
     user_repo,
     video_repo,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "keyword_repo",
     "meta_repo",
     "moderation_repo",
+    "telegram_repo",
     "user_repo",
     "video_repo",
 ]

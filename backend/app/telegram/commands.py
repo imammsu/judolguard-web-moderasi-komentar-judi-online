@@ -1,11 +1,17 @@
-"""Command Telegram dasar sebelum fitur pairing dan patroli diaktifkan."""
+"""Command Telegram dasar dan pairing akun JudolGuard."""
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import Final
 
 from telegram import Update
 from telegram.ext import ContextTypes
+
+from ..services.telegram_pairing import PairingError, consume_pairing_token
+
+logger = logging.getLogger(__name__)
 
 HELP_TEXT: Final = """Perintah JudolGuard Sentinel:
 
@@ -32,15 +38,44 @@ PLANNED_COMMANDS: Final[tuple[tuple[str, str], ...]] = (
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Berikan petunjuk pairing tanpa menyimpan token pada tahap ini."""
+    """Pairing otomatis dari deep link atau berikan petunjuk penggunaan."""
     message = update.effective_message
     if message is None:
         return
 
     if context.args:
+        application = getattr(context, "application", None)
+        flask_app = getattr(application, "bot_data", {}).get("flask_app")
+        chat = getattr(update, "effective_chat", None)
+        raw_token = context.args[0]
+        if flask_app is None or chat is None:
+            await message.reply_text(
+                "Pairing belum dapat diproses karena worker belum terhubung "
+                "ke aplikasi JudolGuard."
+            )
+            return
+
+        def pair() -> None:
+            with flask_app.app_context():
+                consume_pairing_token(raw_token, int(chat.id))
+
+        try:
+            await asyncio.to_thread(pair)
+        except PairingError as exc:
+            await message.reply_text(exc.message)
+            return
+        except Exception:  # noqa: BLE001
+            logger.exception("Gagal memproses pairing Telegram.")
+            await message.reply_text(
+                "Pairing tidak dapat diproses sekarang. Silakan buat tautan baru "
+                "dari aplikasi JudolGuard."
+            )
+            return
+
         await message.reply_text(
-            "Token pairing diterima, tetapi fitur pairing belum tersedia. "
-            "Silakan coba lagi setelah proses pairing diaktifkan."
+            "Telegram berhasil terhubung ke JudolGuard.\n\n"
+            "Notifikasi Sentinel akan dikirim ke chat ini setelah patroli "
+            "diaktifkan."
         )
         return
 

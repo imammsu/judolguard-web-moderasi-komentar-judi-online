@@ -20,6 +20,7 @@ import { ApiError } from '../api/client';
 import AppearanceControls from '../components/AppearanceControls';
 import ChatbotPanel from '../components/ChatbotPanel';
 import { KeywordExtractionPanel } from '../components/KeywordExtractionPanel';
+import TelegramConnectionCard from '../components/TelegramConnectionCard';
 import { useAuth } from '../hooks/useAuth';
 import { type RejectTarget, useModeration } from '../hooks/useModeration';
 import { useScanJob } from '../hooks/useScanJob';
@@ -482,6 +483,7 @@ export default function VideoDetailPage() {
         </div>
       </header>
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-8 sm:px-6">
+        <TelegramConnectionCard />
         <ChatbotPanel videoId={videoId} />
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="grid gap-0 md:grid-cols-[280px_1fr]">

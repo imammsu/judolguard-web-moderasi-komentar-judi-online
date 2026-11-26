@@ -193,6 +193,19 @@ export interface ChatMessagesData {
   total: number;
 }
 
+export interface TelegramPairingData {
+  pairing_url: string;
+  expires_at: string;
+  expires_in: number;
+}
+
+export interface TelegramStatusData {
+  connected: boolean;
+  paused: boolean;
+  chat_id_masked: string | null;
+  connected_at: string | null;
+}
+
 export interface RejectPreviewData {
   estimate: {
     comment_count: number;

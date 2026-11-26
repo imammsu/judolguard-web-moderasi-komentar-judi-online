@@ -11,7 +11,7 @@ from app.telegram.bot import run_bot
 def main() -> None:
     """Muat konfigurasi Flask lalu jalankan bot sebagai proses terpisah."""
     app = create_app()
-    run_bot(app.config)
+    run_bot(app.config, flask_app=app)
 
 
 if __name__ == "__main__":
