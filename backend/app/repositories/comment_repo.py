@@ -34,6 +34,29 @@ def get_unclassified_comments(owner_channel_id: str, video_id: str) -> list[Comm
     return list(db.session.scalars(stmt))
 
 
+def mark_comments_notified(owner_channel_id: str, comment_ids: list[str]) -> int:
+    """Tandai komentar alert setelah pesan Telegram berhasil dikirim."""
+    if not comment_ids:
+        return 0
+    statement = (
+        update(Comment)
+        .where(
+            Comment.owner_channel_id == owner_channel_id,
+            Comment.comment_id.in_(comment_ids),
+            Comment.zone.in_(("judol", "review")),
+            Comment.notified.is_(False),
+        )
+        .values(notified=True, notified_at=datetime.now(UTC))
+    )
+    try:
+        updated = int(db.session.execute(statement).rowcount or 0)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
+    return updated
+
+
 def get_owned_comments_by_ids(owner_channel_id: str, comment_ids: list[str]) -> list[Comment]:
     if not comment_ids:
         return []

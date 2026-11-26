@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from sqlalchemy import select
+
 from ..extensions import db
 from ..models import PatrolRun
 
@@ -30,3 +32,18 @@ def create_patrol_run(
     db.session.add(run)
     db.session.commit()
     return run
+
+
+def record_notification_delivery(
+    run_id: int,
+    *,
+    alerts_sent: int,
+    error: str | None = None,
+) -> None:
+    run = db.session.scalar(select(PatrolRun).where(PatrolRun.id == run_id))
+    if run is None:
+        return
+    run.alerts_sent += max(0, int(alerts_sent))
+    if error:
+        run.error = f"{run.error}; {error}" if run.error else error
+    db.session.commit()

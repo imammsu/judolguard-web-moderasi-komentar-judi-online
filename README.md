@@ -110,8 +110,8 @@ Setelah mengubah `.env`, restart backend. Status tiap kredensial terlihat di kar
 
 Sentinel menjalankan bot Telegram dan scheduler patroli sebagai worker
 terpisah. Scheduler membuat baseline video, mengambil komentar baru secara
-incremental, dan mengklasifikasikannya; notifikasi akan ditambahkan pada tahap
-berikutnya.
+incremental, mengklasifikasikannya, dan mengirim ringkasan alert Telegram;
+command Telegram ditambahkan pada tahap berikutnya.
 
 ```env
 TELEGRAM_BOT_TOKEN=

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping
 from typing import Any
@@ -46,6 +47,8 @@ async def _post_init(application: Application) -> None:
         scheduler = PatrolScheduler(
             flask_app,
             int(flask_app.config.get("SENTINEL_POLL_INTERVAL_SECONDS", 300)),
+            bot=application.bot,
+            event_loop=asyncio.get_running_loop(),
         )
         application.bot_data["patrol_scheduler"] = scheduler
         scheduler.start()
@@ -55,7 +58,7 @@ async def _post_shutdown(application: Application) -> None:
     """Hentikan scheduler sebelum proses worker selesai."""
     scheduler = application.bot_data.get("patrol_scheduler")
     if scheduler is not None:
-        scheduler.stop()
+        await asyncio.to_thread(scheduler.stop)
 
 
 async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

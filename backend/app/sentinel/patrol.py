@@ -18,7 +18,7 @@ from ..repositories import (
     telegram_repo,
     video_repo,
 )
-from ..services import comment_classifier, google_token, youtube
+from ..services import comment_classifier, google_token, telegram_notifications, youtube
 from ..services.google_token import (
     GoogleTokenError,
     InvalidGrantError,
@@ -38,6 +38,10 @@ class PatrolUserSummary:
     new_comments: int = 0
     classified_comments: int = 0
     error: str | None = None
+    patrol_run_id: int | None = None
+    notification_plans: list[telegram_notifications.NotificationPlan] = field(
+        default_factory=list
+    )
 
 
 @dataclass
@@ -47,6 +51,9 @@ class PatrolCycleSummary:
     new_comments: int = 0
     classified_comments: int = 0
     errors: list[str] = field(default_factory=list)
+    notification_plans: list[telegram_notifications.NotificationPlan] = field(
+        default_factory=list
+    )
     skipped_locked: bool = False
 
 
@@ -195,17 +202,20 @@ def _process_user(app: Flask, user: User) -> PatrolUserSummary:
     except (MissingRefreshTokenError, InvalidGrantError) as error:
         telegram_repo.pause_link(user.id)
         summary.error = _error_text(error)
-        patrol_repo.create_patrol_run(
+        run = patrol_repo.create_patrol_run(
             user.id,
             est_api_units=0,
             error=summary.error,
         )
+        summary.patrol_run_id = run.id
         return summary
     except GoogleTokenError as error:
         summary.error = _error_text(error)
-        patrol_repo.create_patrol_run(user.id, error=summary.error)
+        run = patrol_repo.create_patrol_run(user.id, error=summary.error)
+        summary.patrol_run_id = run.id
         return summary
 
+    valid_video_ids: list[str] = []
     try:
         videos = youtube.fetch_channel_videos(
             access_token,
@@ -221,6 +231,11 @@ def _process_user(app: Flask, user: User) -> PatrolUserSummary:
                 valid_videos.append(video)
         if valid_videos:
             video_repo.bulk_upsert_videos(user.channel_id, valid_videos)
+            valid_video_ids = [
+                str(video["video_id"])
+                for video in valid_videos
+                if video.get("video_id")
+            ]
 
         for video in videos:
             try:
@@ -246,13 +261,33 @@ def _process_user(app: Flask, user: User) -> PatrolUserSummary:
         summary.error = _error_text(error)
         logger.exception("Patroli user gagal; user_id=%s", user.id)
 
-    patrol_repo.create_patrol_run(
+    run = patrol_repo.create_patrol_run(
         user.id,
         videos_checked=summary.videos_checked,
         est_api_units=summary.est_api_units,
         new_comments=summary.new_comments,
         error=summary.error,
     )
+    summary.patrol_run_id = run.id
+    try:
+        summary.notification_plans = telegram_notifications.build_notification_plans(
+            user_id=user.id,
+            owner_channel_id=user.channel_id,
+            patrol_run_id=run.id,
+            video_ids=valid_video_ids,
+            web_base_url=str(app.config.get("TELEGRAM_WEB_BASE_URL") or ""),
+            default_min_alert_count=int(
+                app.config.get("SENTINEL_MIN_ALERT_COUNT", 1)
+            ),
+        )
+    except Exception as error:  # noqa: BLE001
+        _append_error(summary, f"notifikasi gagal disiapkan ({type(error).__name__})")
+        logger.exception("Plan notifikasi gagal dibuat; user_id=%s", user.id)
+        patrol_repo.record_notification_delivery(
+            run.id,
+            alerts_sent=0,
+            error=f"Plan notifikasi gagal dibuat ({type(error).__name__}).",
+        )
     return summary
 
 
@@ -280,6 +315,7 @@ def run_patrol_cycle(app: Flask) -> PatrolCycleSummary:
                 result.videos_checked += user_summary.videos_checked
                 result.new_comments += user_summary.new_comments
                 result.classified_comments += user_summary.classified_comments
+                result.notification_plans.extend(user_summary.notification_plans)
                 if user_summary.error:
                     result.errors.append(f"user_id={user.id}: {user_summary.error}")
     finally:
