@@ -109,6 +109,18 @@ class Config:
     LLM_REQUEST_TIMEOUT = _env_int("LLM_REQUEST_TIMEOUT", 45)
     LLM_MAX_RETRIES = _env_int("LLM_MAX_RETRIES", 1)
 
+    # JudolGuard Sentinel (Telegram patrol; worker diimplementasikan pada tahap berikutnya).
+    TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN")
+    TELEGRAM_WEB_BASE_URL = _env("TELEGRAM_WEB_BASE_URL", "http://localhost:5173")
+    SENTINEL_ENABLED = _env("SENTINEL_ENABLED", "false").lower() in {"1", "true", "yes"}
+    SENTINEL_POLL_INTERVAL_SECONDS = _env_int("SENTINEL_POLL_INTERVAL_SECONDS", 300)
+    SENTINEL_MAX_VIDEOS = _env_int("SENTINEL_MAX_VIDEOS", 5)
+    PAIRING_TOKEN_TTL_SECONDS = _env_int("PAIRING_TOKEN_TTL_SECONDS", 600)
+    SENTINEL_MIN_ALERT_COUNT = _env_int("SENTINEL_MIN_ALERT_COUNT", 1)
+    TELEGRAM_MAX_MESSAGES_PER_MINUTE = _env_int(
+        "TELEGRAM_MAX_MESSAGES_PER_MINUTE", 10
+    )
+
     # Rate limit (Flask-Limiter). Memori proses cukup untuk satu instance.
     RATELIMIT_STORAGE_URI = "memory://"
     RATELIMIT_HEADERS_ENABLED = True

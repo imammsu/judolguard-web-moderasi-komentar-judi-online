@@ -106,6 +106,27 @@ Salin kedua baris hasilnya ke `.env`. Jangan ganti `FERNET_KEY` setelah ada toke
 
 Setelah mengubah `.env`, restart backend. Status tiap kredensial terlihat di kartu **Konfigurasi (.env)** pada beranda.
 
+### 5. JudolGuard Sentinel (Telegram)
+
+Sentinel akan menjalankan bot Telegram dan scheduler patroli sebagai worker
+terpisah pada tahap implementasi berikutnya. Konfigurasi dasarnya:
+
+```env
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_WEB_BASE_URL=http://localhost:5173
+SENTINEL_ENABLED=false
+SENTINEL_POLL_INTERVAL_SECONDS=300
+SENTINEL_MAX_VIDEOS=5
+PAIRING_TOKEN_TTL_SECONDS=600
+SENTINEL_MIN_ALERT_COUNT=1
+TELEGRAM_MAX_MESSAGES_PER_MINUTE=10
+```
+
+Untuk deployment, jalankan API Flask dan Sentinel Worker sebagai proses
+terpisah pada hosting yang mendukung proses selalu aktif seperti Railway atau
+Render Background Worker. Scheduler tidak boleh dijalankan di setiap instance
+API agar satu siklus patroli tidak berjalan ganda.
+
 ## Aturan commit & branch
 
 - Branch: `main` (stabil, tiap part ditandai tag `v0.x`), `part-N-nama` untuk pengerjaan per part.

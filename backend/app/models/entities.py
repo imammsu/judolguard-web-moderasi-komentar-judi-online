@@ -94,6 +94,13 @@ class Comment(db.Model):
         Index("ix_comments_owner_video_zone", "owner_channel_id", "video_id", "zone"),
         Index("ix_comments_author_channel_id", "author_channel_id"),
         Index("ix_comments_text_hash", "text_hash"),
+        Index(
+            "ix_comments_notification_lookup",
+            "owner_channel_id",
+            "video_id",
+            "zone",
+            "notified",
+        ),
     )
 
     comment_id: Mapped[str] = mapped_column(Text, primary_key=True)
@@ -125,6 +132,132 @@ class Comment(db.Model):
     # Koreksi pengguna & status moderasi
     user_label: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     moderation_status: Mapped[str] = mapped_column(Text, nullable=False, default="none")
+    notified: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    notified_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ, nullable=True)
+
+
+class TelegramLink(db.Model):
+    """Pasangan satu akun JudolGuard dengan satu chat Telegram aktif."""
+
+    __tablename__ = "telegram_links"
+    __table_args__ = (
+        UniqueConstraint("user_id", name="uq_telegram_links_user_id"),
+        UniqueConstraint("chat_id", name="uq_telegram_links_chat_id"),
+        CheckConstraint("min_alert_count >= 0", name="ck_telegram_links_min_alert_count"),
+        Index("ix_telegram_links_paused", "paused"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        BIGINT_PK,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    chat_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    paused: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    min_alert_count: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, default=utc_now, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
+class PairingToken(db.Model):
+    """Token pairing Telegram sekali pakai yang disimpan hanya dalam bentuk hash."""
+
+    __tablename__ = "pairing_tokens"
+    __table_args__ = (
+        Index("ix_pairing_tokens_user_id", "user_id"),
+        Index("ix_pairing_tokens_expires_at", "expires_at"),
+    )
+
+    token_hash: Mapped[str] = mapped_column(CHAR(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        BIGINT_PK,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    expires_at: Mapped[datetime] = mapped_column(TIMESTAMPTZ, nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(TIMESTAMPTZ, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, default=utc_now, server_default=func.now()
+    )
+
+
+class MonitoredVideo(db.Model):
+    """Video yang dipantau Sentinel beserta baseline jumlah komentarnya."""
+
+    __tablename__ = "monitored_videos"
+    __table_args__ = (
+        UniqueConstraint("user_id", "video_id", name="uq_monitored_videos_user_video"),
+        CheckConstraint(
+            "last_comment_count IS NULL OR last_comment_count >= 0",
+            name="ck_monitored_videos_comment_count",
+        ),
+        Index("ix_monitored_videos_user_active", "user_id", "active"),
+        Index("ix_monitored_videos_video_id", "video_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        BIGINT_PK,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    video_id: Mapped[str] = mapped_column(
+        Text,
+        ForeignKey("videos.video_id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    last_comment_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    last_checked_at: Mapped[datetime | None] = mapped_column(
+        TIMESTAMPTZ, nullable=True
+    )
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, default=utc_now, server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ,
+        nullable=False,
+        default=utc_now,
+        onupdate=utc_now,
+        server_default=func.now(),
+    )
+
+
+class PatrolRun(db.Model):
+    """Log satu siklus patroli Sentinel."""
+
+    __tablename__ = "patrol_runs"
+    __table_args__ = (
+        CheckConstraint("videos_checked >= 0", name="ck_patrol_runs_videos_checked"),
+        CheckConstraint("est_api_units >= 0", name="ck_patrol_runs_api_units"),
+        CheckConstraint("new_comments >= 0", name="ck_patrol_runs_new_comments"),
+        CheckConstraint("alerts_sent >= 0", name="ck_patrol_runs_alerts_sent"),
+        Index("ix_patrol_runs_user_run_at", "user_id", "run_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        BIGINT_PK,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    run_at: Mapped[datetime] = mapped_column(
+        TIMESTAMPTZ, nullable=False, default=utc_now, server_default=func.now()
+    )
+    videos_checked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    est_api_units: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    new_comments: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    alerts_sent: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class Keyword(db.Model):

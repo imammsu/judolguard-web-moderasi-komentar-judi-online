@@ -8,6 +8,10 @@ from .entities import (
     Job,
     Keyword,
     ModerationLog,
+    MonitoredVideo,
+    PairingToken,
+    PatrolRun,
+    TelegramLink,
     User,
     Video,
 )
@@ -19,7 +23,11 @@ __all__ = [
     "Comment",
     "Job",
     "Keyword",
+    "MonitoredVideo",
     "ModerationLog",
+    "PairingToken",
+    "PatrolRun",
+    "TelegramLink",
     "User",
     "Video",
 ]
