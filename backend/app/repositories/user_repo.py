@@ -22,6 +22,13 @@ def get_user_by_channel_id(channel_id: str) -> User | None:
     return db.session.scalars(stmt).first()
 
 
+def get_user_by_id(user_id: int) -> User | None:
+    """Ambil user berdasarkan primary key untuk proses internal Sentinel."""
+    if not user_id:
+        return None
+    return db.session.get(User, user_id)
+
+
 def upsert_user(
     *,
     channel_id: str,
@@ -72,6 +79,14 @@ def upsert_user(
 def get_decrypted_refresh_token(channel_id: str) -> str:
     """Ambil dan dekripsi refresh token milik ``channel_id``."""
     user = get_user_by_channel_id(channel_id)
+    if user is None or not user.refresh_token_enc:
+        return ""
+    return decrypt_token(user.refresh_token_enc)
+
+
+def get_decrypted_refresh_token_by_user_id(user_id: int) -> str:
+    """Ambil refresh token terenkripsi berdasarkan ``users.id``."""
+    user = get_user_by_id(user_id)
     if user is None or not user.refresh_token_enc:
         return ""
     return decrypt_token(user.refresh_token_enc)
