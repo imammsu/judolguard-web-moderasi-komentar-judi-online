@@ -36,6 +36,12 @@ def get_video(owner_channel_id: str, video_id: str) -> Video | None:
     return db.session.scalars(stmt).first()
 
 
+def get_video_by_id(video_id: str) -> Video | None:
+    if not video_id:
+        return None
+    return db.session.get(Video, video_id)
+
+
 def list_videos(owner_channel_id: str, page: int, page_size: int) -> list[Video]:
     stmt = (
         select(Video)

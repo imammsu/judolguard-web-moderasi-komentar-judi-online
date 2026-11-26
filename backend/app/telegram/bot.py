@@ -14,6 +14,7 @@ from telegram.ext import (
     ContextTypes,
 )
 
+from ..sentinel.scheduler import PatrolScheduler
 from .commands import (
     PLANNED_COMMANDS,
     help_command,
@@ -40,6 +41,21 @@ async def _post_init(application: Application) -> None:
         [BotCommand(command, description) for command, description in PLANNED_COMMANDS]
     )
     logger.info("Daftar command Telegram berhasil didaftarkan.")
+    flask_app = application.bot_data.get("flask_app")
+    if flask_app is not None and flask_app.config.get("SENTINEL_ENABLED", False):
+        scheduler = PatrolScheduler(
+            flask_app,
+            int(flask_app.config.get("SENTINEL_POLL_INTERVAL_SECONDS", 300)),
+        )
+        application.bot_data["patrol_scheduler"] = scheduler
+        scheduler.start()
+
+
+async def _post_shutdown(application: Application) -> None:
+    """Hentikan scheduler sebelum proses worker selesai."""
+    scheduler = application.bot_data.get("patrol_scheduler")
+    if scheduler is not None:
+        scheduler.stop()
 
 
 async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -59,6 +75,7 @@ def build_application(token: str, flask_app: Any | None = None) -> Application:
         ApplicationBuilder()
         .token(cleaned_token)
         .post_init(_post_init)
+        .post_shutdown(_post_shutdown)
         .build()
     )
     if flask_app is not None:

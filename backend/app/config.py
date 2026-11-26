@@ -109,7 +109,7 @@ class Config:
     LLM_REQUEST_TIMEOUT = _env_int("LLM_REQUEST_TIMEOUT", 45)
     LLM_MAX_RETRIES = _env_int("LLM_MAX_RETRIES", 1)
 
-    # JudolGuard Sentinel (Telegram patrol; worker diimplementasikan pada tahap berikutnya).
+    # JudolGuard Sentinel (Telegram patrol).
     TELEGRAM_BOT_TOKEN = _env("TELEGRAM_BOT_TOKEN")
     TELEGRAM_BOT_USERNAME = _env("TELEGRAM_BOT_USERNAME")
     TELEGRAM_WEB_BASE_URL = _env("TELEGRAM_WEB_BASE_URL", "http://localhost:5173")

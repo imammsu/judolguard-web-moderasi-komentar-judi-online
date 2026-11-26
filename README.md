@@ -108,8 +108,9 @@ Setelah mengubah `.env`, restart backend. Status tiap kredensial terlihat di kar
 
 ### 5. JudolGuard Sentinel (Telegram)
 
-Sentinel akan menjalankan bot Telegram dan scheduler patroli sebagai worker
-terpisah pada tahap implementasi berikutnya. Konfigurasi dasarnya:
+Sentinel menjalankan bot Telegram dan scheduler patroli sebagai worker
+terpisah. Scheduler membuat baseline video dan mengambil komentar baru secara
+incremental; klasifikasi dan notifikasi akan ditambahkan pada tahap berikutnya.
 
 ```env
 TELEGRAM_BOT_TOKEN=
@@ -129,7 +130,7 @@ terpisah pada hosting yang mendukung proses selalu aktif seperti Railway atau
 Render Background Worker. Scheduler tidak boleh dijalankan di setiap instance
 API agar satu siklus patroli tidak berjalan ganda.
 
-Pada Tahap 2, worker Telegram dapat diuji secara lokal dengan:
+Worker Telegram dan patroli dapat diuji secara lokal dengan:
 
 ```powershell
 cd backend

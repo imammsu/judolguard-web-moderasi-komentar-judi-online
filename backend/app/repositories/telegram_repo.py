@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 
 from ..extensions import db
-from ..models import TelegramLink
+from ..models import TelegramLink, User
 
 
 def get_link_by_user_id(user_id: int) -> TelegramLink | None:
@@ -20,6 +20,28 @@ def get_link_by_chat_id(chat_id: int) -> TelegramLink | None:
     return db.session.scalars(
         select(TelegramLink).where(TelegramLink.chat_id == chat_id)
     ).first()
+
+
+def list_active_users() -> list[User]:
+    """Ambil user yang Telegram-nya terhubung dan tidak sedang dijeda."""
+    statement = (
+        select(User)
+        .join(TelegramLink, TelegramLink.user_id == User.id)
+        .where(TelegramLink.paused.is_(False))
+        .order_by(User.id.asc())
+    )
+    return list(db.session.scalars(statement))
+
+
+def pause_link(user_id: int) -> bool:
+    """Jeda link Telegram aktif milik user."""
+    link = get_link_by_user_id(user_id)
+    if link is None:
+        return False
+    link.paused = True
+    link.updated_at = datetime.now(UTC)
+    db.session.commit()
+    return True
 
 
 def save_link(user_id: int, chat_id: int) -> TelegramLink:
