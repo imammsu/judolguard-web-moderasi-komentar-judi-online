@@ -64,10 +64,10 @@ def _error_text(error: Exception) -> str:
 
 
 def _video_api_units(video_count: int) -> int:
-    """Estimasi channels.list + playlistItems.list + videos.list per batch."""
+    """Estimasi videos.list untuk target monitoring dalam batch maksimal 50 ID."""
     if video_count <= 0:
-        return 2
-    return 2 + ceil(video_count / youtube.VIDEO_BATCH_SIZE)
+        return 0
+    return ceil(video_count / youtube.VIDEO_BATCH_SIZE)
 
 
 def _append_error(summary: PatrolUserSummary, message: str) -> None:
@@ -145,12 +145,8 @@ def _process_video(
         return
 
     monitored = monitored_video_repo.get_monitored_video(user.id, video_id)
-    if monitored is not None and not monitored.active:
+    if monitored is None or not monitored.active:
         return
-    monitored = monitored or monitored_video_repo.get_or_create_monitored_video(
-        user.id,
-        video_id,
-    )
     current_count = max(0, int(comment_count))
 
     if monitored.last_comment_count is None:
@@ -217,12 +213,29 @@ def _process_user(app: Flask, user: User) -> PatrolUserSummary:
 
     valid_video_ids: list[str] = []
     try:
-        videos = youtube.fetch_channel_videos(
+        monitored_rows = monitored_video_repo.list_active_monitored_videos(user.id)
+        max_monitored = max(
+            0,
+            int(app.config.get("SENTINEL_MAX_MONITORED_VIDEOS", 50)),
+        )
+        monitored_rows = monitored_rows[:max_monitored]
+        monitored_video_ids = [row.video_id for row in monitored_rows]
+        summary.est_api_units = _video_api_units(len(monitored_video_ids))
+        if not monitored_video_ids:
+            run = patrol_repo.create_patrol_run(
+                user.id,
+                videos_checked=0,
+                est_api_units=0,
+                error=None,
+            )
+            summary.patrol_run_id = run.id
+            return summary
+
+        videos = youtube.fetch_video_metadata(
             access_token,
-            max_videos=int(app.config.get("SENTINEL_MAX_VIDEOS", 5)),
+            monitored_video_ids,
         )
         summary.videos_checked = len(videos)
-        summary.est_api_units = _video_api_units(len(videos))
 
         valid_videos = []
         for video in videos:

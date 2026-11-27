@@ -11,6 +11,7 @@ from telegram import BotCommand, Update
 from telegram.ext import (
     Application,
     ApplicationBuilder,
+    CallbackQueryHandler,
     CommandHandler,
     ContextTypes,
 )
@@ -20,11 +21,15 @@ from .commands import (
     PLANNED_COMMANDS,
     disconnect_command,
     help_command,
+    monitor_callback,
+    monitor_command,
+    monitored_command,
     pause_command,
     resume_command,
     start_command,
     stats_command,
     status_command,
+    stop_monitor_command,
     topspammer_command,
 )
 
@@ -94,6 +99,9 @@ def build_application(token: str, flask_app: Any | None = None) -> Application:
         "status": status_command,
         "stats": stats_command,
         "topspammer": topspammer_command,
+        "pantau": monitor_command,
+        "pantauan": monitored_command,
+        "berhentipantau": stop_monitor_command,
         "pause": pause_command,
         "resume": resume_command,
         "putuskan": disconnect_command,
@@ -102,6 +110,7 @@ def build_application(token: str, flask_app: Any | None = None) -> Application:
         handler = command_handlers.get(command)
         if handler is not None:
             application.add_handler(CommandHandler(command, handler))
+    application.add_handler(CallbackQueryHandler(monitor_callback, pattern=r"^monitor:"))
     application.add_error_handler(_error_handler)
     return application
 

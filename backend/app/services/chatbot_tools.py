@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import desc, func, select
 
 from ..extensions import db
-from ..models import Comment, Keyword, Video
+from ..models import Comment, Keyword, MonitoredVideo, User, Video
 from ..repositories import video_repo
 
 MAX_TOOL_LIMIT = 20
@@ -96,7 +96,11 @@ TOOL_DEFINITIONS: list[dict[str, object]] = [
     },
     {
         "name": "compare_videos",
-        "description": "Perbandingan jumlah komentar judol antarvideo milik user.",
+        "description": (
+            "Peringkat video milik user berdasarkan jumlah komentar judol tersimpan. "
+            "Gunakan untuk pertanyaan video yang paling diserang, paling banyak spam, "
+            "paling berisiko, atau perlu diwaspadai."
+        ),
         "parameters": {
             "type": "OBJECT",
             "properties": {"limit": {"type": "INTEGER", "minimum": 1, "maximum": MAX_TOOL_LIMIT}},
@@ -286,11 +290,33 @@ def duplicate_comments(
 
 
 def compare_videos(owner_channel_id: str, *, limit: int = 10) -> dict[str, object]:
+    active_subquery = (
+        select(MonitoredVideo.active)
+        .join(User, User.id == MonitoredVideo.user_id)
+        .where(
+            MonitoredVideo.video_id == Video.video_id,
+            User.channel_id == owner_channel_id,
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
+    checked_subquery = (
+        select(MonitoredVideo.last_checked_at)
+        .join(User, User.id == MonitoredVideo.user_id)
+        .where(
+            MonitoredVideo.video_id == Video.video_id,
+            User.channel_id == owner_channel_id,
+        )
+        .limit(1)
+        .scalar_subquery()
+    )
     statement = (
         select(
             Comment.video_id,
             Video.title,
             func.count(Comment.comment_id).label("judol_count"),
+            active_subquery.label("monitoring_active"),
+            checked_subquery.label("last_checked_at"),
         )
         .join(Video, Video.video_id == Comment.video_id)
         .where(
@@ -306,6 +332,10 @@ def compare_videos(owner_channel_id: str, *, limit: int = 10) -> dict[str, objec
             "video_id": row.video_id,
             "title": row.title,
             "judol_count": int(row.judol_count),
+            "monitoring_active": bool(row.monitoring_active),
+            "last_checked_at": (
+                row.last_checked_at.isoformat() if row.last_checked_at else None
+            ),
         }
         for row in db.session.execute(statement)
     ]

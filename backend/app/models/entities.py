@@ -42,9 +42,13 @@ class User(db.Model):
     """Tabel `users` — pemilik channel YouTube yang login via OAuth."""
 
     __tablename__ = "users"
+    __table_args__ = (
+        UniqueConstraint("channel_id", name="uq_users_channel_id"),
+        Index("ix_users_channel_id", "channel_id", unique=True),
+    )
 
     id: Mapped[int] = mapped_column(BIGINT_PK, primary_key=True, autoincrement=True)
-    channel_id: Mapped[str] = mapped_column(Text, unique=True, nullable=False, index=True)
+    channel_id: Mapped[str] = mapped_column(Text, nullable=False)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
     channel_title: Mapped[str | None] = mapped_column(Text, nullable=True)
     thumbnail_url: Mapped[str | None] = mapped_column(Text, nullable=True)

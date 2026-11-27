@@ -8,7 +8,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any, Final
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from ..repositories import (
@@ -29,6 +29,9 @@ HELP_TEXT: Final = """Perintah JudolGuard Sentinel:
 /status - Melihat status patroli
 /stats - Melihat statistik komentar
 /topspammer - Melihat akun spam terbanyak
+/pantau - Memilih video untuk dipantau
+/pantauan - Melihat video yang sedang dipantau
+/berhentipantau - Menghentikan pemantauan video
 /pause - Menjeda patroli dan notifikasi
 /resume - Melanjutkan patroli dan notifikasi
 /putuskan - Memutuskan akun Telegram
@@ -40,6 +43,9 @@ PLANNED_COMMANDS: Final[tuple[tuple[str, str], ...]] = (
     ("status", "Melihat status patroli"),
     ("stats", "Melihat statistik komentar"),
     ("topspammer", "Melihat akun spam terbanyak"),
+    ("pantau", "Memilih video untuk dipantau"),
+    ("pantauan", "Melihat video yang dipantau"),
+    ("berhentipantau", "Menghentikan pemantauan video"),
     ("pause", "Menjeda patroli"),
     ("resume", "Melanjutkan patroli"),
     ("putuskan", "Memutuskan akun Telegram"),
@@ -273,6 +279,239 @@ async def topspammer_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         name = html.escape(str(row["author_name"]))
         lines.append(f"{index}. {name} — <b>{row['comment_count']}</b> komentar")
     await _reply_html(message, "\n".join(lines))
+
+
+MONITOR_PAGE_SIZE: Final = 8
+MONITOR_CALLBACK_PREFIX: Final = "monitor"
+
+
+def _monitor_page(
+    app: Any,
+    owner: dict[str, Any],
+    *,
+    page: int,
+    active_only: bool,
+) -> tuple[str, InlineKeyboardMarkup]:
+    with app.app_context():
+        if active_only:
+            monitored = monitored_video_repo.list_active_monitored_videos(owner["user_id"])
+            all_videos = [
+                video_repo.get_video(owner["channel_id"], row.video_id)
+                for row in monitored
+            ]
+            all_videos = [video for video in all_videos if video is not None]
+            total_count = len(all_videos)
+            total_pages = max(1, (total_count + MONITOR_PAGE_SIZE - 1) // MONITOR_PAGE_SIZE)
+            page = min(max(page, 1), total_pages)
+            page_videos = all_videos[
+                (page - 1) * MONITOR_PAGE_SIZE : page * MONITOR_PAGE_SIZE
+            ]
+        else:
+            total_count = video_repo.count_videos(owner["channel_id"])
+            total_pages = max(1, (total_count + MONITOR_PAGE_SIZE - 1) // MONITOR_PAGE_SIZE)
+            page = min(max(page, 1), total_pages)
+            page_videos = video_repo.list_videos(
+                owner["channel_id"],
+                page,
+                MONITOR_PAGE_SIZE,
+            )
+        active_ids = {
+            row.video_id
+            for row in monitored_video_repo.list_active_monitored_videos(owner["user_id"])
+        }
+
+    if not page_videos:
+        text = (
+            "Belum ada video pada katalog lokal.\n"
+            "Buka aplikasi web dan refresh daftar video terlebih dahulu."
+        )
+        return text, InlineKeyboardMarkup([])
+
+    action = "berhenti" if active_only else "toggle"
+    lines = [
+        (
+            "🎥 <b>Pilih video yang dipantau</b>"
+            if not active_only
+            else "🎥 <b>Video yang sedang dipantau</b>"
+        ),
+        "",
+    ]
+    buttons: list[list[InlineKeyboardButton]] = []
+    for video in page_videos:
+        title = str(video.title or video.video_id)
+        label = title[:48] + "…" if len(title) > 49 else title
+        if video.video_id in active_ids:
+            label = f"✅ {label}"
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    label,
+                    callback_data=(
+                        f"{MONITOR_CALLBACK_PREFIX}:"
+                        f"{action}:{video.video_id}:{page}:{int(active_only)}"
+                    ),
+                )
+            ]
+        )
+        lines.append(f"• {html.escape(title)}")
+
+    navigation: list[InlineKeyboardButton] = []
+    if page > 1:
+        navigation.append(
+            InlineKeyboardButton(
+                "‹ Sebelumnya",
+                callback_data=f"{MONITOR_CALLBACK_PREFIX}:page:{page - 1}:{int(active_only)}",
+            )
+        )
+    if page < total_pages:
+        navigation.append(
+            InlineKeyboardButton(
+                "Berikutnya ›",
+                callback_data=f"{MONITOR_CALLBACK_PREFIX}:page:{page + 1}:{int(active_only)}",
+            )
+        )
+    if navigation:
+        buttons.append(navigation)
+    lines.extend(["", f"Halaman {page}/{total_pages}"])
+    return "\n".join(lines), InlineKeyboardMarkup(buttons)
+
+
+async def _monitor_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    active_only: bool,
+) -> None:
+    required = await _require_owner(update, context)
+    if required is None:
+        return
+    app, _chat_id, owner = required
+    message = update.effective_message
+    text, markup = await asyncio.to_thread(
+        _monitor_page,
+        app,
+        owner,
+        page=1,
+        active_only=active_only,
+    )
+    await message.reply_text(text, parse_mode="HTML", reply_markup=markup)
+
+
+async def monitor_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _monitor_command(update, context, active_only=False)
+
+
+async def monitored_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _monitor_command(update, context, active_only=True)
+
+
+async def stop_monitor_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _monitor_command(update, context, active_only=True)
+
+
+def _toggle_monitoring(
+    app: Any,
+    chat_id: int,
+    video_id: str,
+    *,
+    active: bool | None,
+) -> tuple[bool, str]:
+    with app.app_context():
+        pair = telegram_repo.get_owner_by_chat_id(chat_id)
+        if pair is None:
+            return False, "Telegram belum terhubung ke JudolGuard."
+        user, _link = pair
+        video = video_repo.get_video(user.channel_id, video_id)
+        if video is None:
+            return False, "Video tidak ditemukan atau bukan milik channel Anda."
+        current = monitored_video_repo.get_monitored_video(user.id, video_id)
+        next_active = not current.active if active is None and current else bool(active)
+        active_count = len(monitored_video_repo.list_active_monitored_videos(user.id))
+        max_active = max(
+            1,
+            int(app.config.get("SENTINEL_MAX_MONITORED_VIDEOS", 50)),
+        )
+        if next_active and (current is None or not current.active) and active_count >= max_active:
+            return False, f"Batas {max_active} video aktif telah tercapai."
+        monitored_video_repo.set_monitoring(
+            user.id,
+            video_id,
+            active=next_active,
+            reset_baseline=next_active,
+        )
+        return True, (
+            "✅ Video ditambahkan ke pemantauan. "
+            "Baseline akan dibuat pada patroli berikutnya."
+            if next_active
+            else "⏸️ Pemantauan video dihentikan."
+        )
+
+
+async def monitor_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query is None or not query.data:
+        return
+    await query.answer()
+    app = _get_flask_app(context)
+    message = query.message
+    chat = getattr(update, "effective_chat", None)
+    if app is None or message is None or chat is None:
+        return
+
+    parts = query.data.split(":")
+    try:
+        action = parts[1]
+        page = int(parts[-2])
+        active_only = bool(int(parts[-1]))
+    except (IndexError, ValueError):
+        await query.edit_message_text("Pilihan monitoring tidak valid.")
+        return
+
+    owner = await asyncio.to_thread(_owner_for_chat, app, int(chat.id))
+    if owner is None:
+        await query.edit_message_text("Telegram belum terhubung ke JudolGuard.")
+        return
+
+    if action == "page":
+        text, markup = await asyncio.to_thread(
+            _monitor_page,
+            app,
+            owner,
+            page=page,
+            active_only=active_only,
+        )
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
+        return
+
+    if action not in {"toggle", "berhenti"} or len(parts) < 5:
+        await query.edit_message_text("Pilihan monitoring tidak valid.")
+        return
+
+    video_id = parts[2]
+    active = False if action == "berhenti" else None
+    success, result_text = await asyncio.to_thread(
+        _toggle_monitoring,
+        app,
+        int(chat.id),
+        video_id,
+        active=active,
+    )
+    if not success:
+        await query.edit_message_text(result_text)
+        return
+
+    text, markup = await asyncio.to_thread(
+        _monitor_page,
+        app,
+        owner,
+        page=page,
+        active_only=active_only,
+    )
+    await query.edit_message_text(
+        f"{result_text}\n\n{text}",
+        parse_mode="HTML",
+        reply_markup=markup,
+    )
 
 
 async def _set_pause_command(

@@ -52,7 +52,7 @@ def test_build_application_requires_token():
 def test_build_application_registers_handlers_without_network():
     application = build_application("123456:local-test-token")
     assert len(application.handlers) == 1
-    assert len(application.handlers[0]) == 8
+    assert len(application.handlers[0]) == 12
 
 
 def test_run_bot_requires_explicit_enable_flag():

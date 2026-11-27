@@ -11,10 +11,13 @@ from app.models import Comment, MonitoredVideo, PatrolRun, TelegramLink, Video
 from app.repositories import user_repo
 from app.telegram.commands import (
     disconnect_command,
+    monitor_callback,
+    monitor_command,
     pause_command,
     resume_command,
     stats_command,
     status_command,
+    stop_monitor_command,
     topspammer_command,
 )
 
@@ -25,6 +28,20 @@ class _FakeMessage:
 
     async def reply_text(self, text: str, **kwargs) -> None:
         self.responses.append((text, kwargs))
+
+
+class _FakeCallbackQuery:
+    def __init__(self, data: str, message: _FakeMessage) -> None:
+        self.data = data
+        self.message = message
+        self.answered = False
+        self.edited: list[tuple[str, dict[str, object]]] = []
+
+    async def answer(self) -> None:
+        self.answered = True
+
+    async def edit_message_text(self, text: str, **kwargs) -> None:
+        self.edited.append((text, kwargs))
 
 
 def _context(app):
@@ -218,6 +235,45 @@ def test_pause_resume_and_disconnect_change_telegram_link(app):
     update, message = _update(1001)
     asyncio.run(status_command(update, context))
     assert "belum terhubung" in message.responses[0][0].lower()
+
+
+def test_monitor_command_lists_videos_and_callback_toggles_selection(app):
+    _seed_command_user(app)
+    context = _context(app)
+
+    update, message = _update(1001)
+    asyncio.run(monitor_command(update, context))
+
+    assert "Video Command" in message.responses[0][0]
+    markup = message.responses[0][1]["reply_markup"]
+    callback_data = markup.inline_keyboard[0][0].callback_data
+    assert callback_data == "monitor:toggle:video-command:1:0"
+
+    callback_message = _FakeMessage()
+    callback = _FakeCallbackQuery(callback_data, callback_message)
+    callback_update = SimpleNamespace(
+        callback_query=callback,
+        effective_chat=SimpleNamespace(id=1001),
+    )
+    asyncio.run(monitor_callback(callback_update, context))
+
+    assert callback.answered is True
+    assert "Pemantauan video dihentikan" in callback.edited[0][0]
+    with app.app_context():
+        monitored = db.session.query(MonitoredVideo).one()
+        assert monitored.active is False
+
+
+def test_stop_monitor_command_shows_only_active_videos(app):
+    _seed_command_user(app)
+    context = _context(app)
+
+    update, message = _update(1001)
+    asyncio.run(stop_monitor_command(update, context))
+
+    assert "Video yang sedang dipantau" in message.responses[0][0]
+    markup = message.responses[0][1]["reply_markup"]
+    assert markup.inline_keyboard[0][0].callback_data == "monitor:berhenti:video-command:1:1"
 
 
 def test_unpaired_chat_cannot_read_other_users_data(app):

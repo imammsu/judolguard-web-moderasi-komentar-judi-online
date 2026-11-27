@@ -39,15 +39,44 @@ def _token_result() -> AccessTokenResult:
     )
 
 
+def _select_video(
+    app,
+    user_id: int,
+    channel_id: str,
+    video_id: str,
+    *,
+    last_comment_count: int | None = None,
+) -> None:
+    with app.app_context():
+        db.session.add(
+            Video(
+                video_id=video_id,
+                owner_channel_id=channel_id,
+                title=video_id,
+                comment_count=last_comment_count or 0,
+            )
+        )
+        db.session.add(
+            MonitoredVideo(
+                user_id=user_id,
+                video_id=video_id,
+                last_comment_count=last_comment_count,
+                active=True,
+            )
+        )
+        db.session.commit()
+
+
 def test_first_cycle_creates_baseline_without_fetching_old_comments(app, monkeypatch):
     user_id = _seed_linked_user(app, "UC_PATROL_BASELINE")
+    _select_video(app, user_id, "UC_PATROL_BASELINE", "video-baseline")
     monkeypatch.setattr(
         "app.sentinel.patrol.google_token.refresh_access_token",
         lambda app, user_id: _token_result(),
     )
     monkeypatch.setattr(
-        "app.sentinel.patrol.youtube.fetch_channel_videos",
-        lambda token, max_videos: [
+        "app.sentinel.patrol.youtube.fetch_video_metadata",
+        lambda token, video_ids: [
             {
                 "video_id": "video-baseline",
                 "title": "Video baseline",
@@ -79,7 +108,7 @@ def test_first_cycle_creates_baseline_without_fetching_old_comments(app, monkeyp
         assert monitored.last_checked_at is not None
         assert db.session.query(Comment).count() == 0
         patrol_run = db.session.query(PatrolRun).one()
-        assert patrol_run.est_api_units == 3
+        assert patrol_run.est_api_units == 1
         assert patrol_run.error is None
 
 
@@ -88,14 +117,18 @@ def test_unchanged_count_skips_comment_api_and_changed_count_is_incremental(
     monkeypatch,
 ):
     _seed_linked_user(app, "UC_PATROL_INCREMENTAL")
+    with app.app_context():
+        user = db.session.query(User).filter_by(channel_id="UC_PATROL_INCREMENTAL").one()
+        user_id = user.id
+    _select_video(app, user_id, "UC_PATROL_INCREMENTAL", "video-incremental")
     count = {"value": 2}
     monkeypatch.setattr(
         "app.sentinel.patrol.google_token.refresh_access_token",
         lambda app, user_id: _token_result(),
     )
     monkeypatch.setattr(
-        "app.sentinel.patrol.youtube.fetch_channel_videos",
-        lambda token, max_videos: [
+        "app.sentinel.patrol.youtube.fetch_video_metadata",
+        lambda token, video_ids: [
             {"video_id": "video-incremental", "title": "Video", "comment_count": count["value"]}
         ],
     )
@@ -212,8 +245,10 @@ def test_invalid_grant_pauses_user_and_records_run(app, monkeypatch):
 def test_user_and_video_errors_are_isolated(app, monkeypatch):
     first_user_id = _seed_linked_user(app, "UC_PATROL_ERROR")
     second_user_id = _seed_linked_user(app, "UC_PATROL_OK")
+    _select_video(app, first_user_id, "UC_PATROL_ERROR", "video-error")
+    _select_video(app, second_user_id, "UC_PATROL_OK", "video-ok")
 
-    def fetch_videos(token, max_videos):
+    def fetch_metadata(token, video_ids):
         if token == f"token-{first_user_id}":
             raise YouTubeServiceError("youtube_unavailable", "network")
         return [{"video_id": "video-ok", "title": "OK", "comment_count": 1}]
@@ -230,8 +265,8 @@ def test_user_and_video_errors_are_isolated(app, monkeypatch):
         refresh_with_user,
     )
     monkeypatch.setattr(
-        "app.sentinel.patrol.youtube.fetch_channel_videos",
-        fetch_videos,
+        "app.sentinel.patrol.youtube.fetch_video_metadata",
+        fetch_metadata,
     )
 
     result = run_patrol_cycle(app)
@@ -241,7 +276,7 @@ def test_user_and_video_errors_are_isolated(app, monkeypatch):
     with app.app_context():
         assert db.session.query(PatrolRun).count() == 2
         assert db.session.query(MonitoredVideo).filter_by(user_id=second_user_id).count() == 1
-        assert db.session.query(MonitoredVideo).filter_by(user_id=first_user_id).count() == 0
+        assert db.session.query(MonitoredVideo).filter_by(user_id=first_user_id).count() == 1
 
 
 def test_existing_video_owned_by_other_user_is_not_reassigned(app, monkeypatch):
@@ -250,6 +285,13 @@ def test_existing_video_owned_by_other_user_is_not_reassigned(app, monkeypatch):
     with app.app_context():
         owner_b = db.session.get(User, second_user_id)
         db.session.add(Video(video_id="shared-video", owner_channel_id=owner_b.channel_id))
+        db.session.add(
+            MonitoredVideo(
+                user_id=first_user_id,
+                video_id="shared-video",
+                active=True,
+            )
+        )
         db.session.commit()
 
     monkeypatch.setattr(
@@ -257,8 +299,8 @@ def test_existing_video_owned_by_other_user_is_not_reassigned(app, monkeypatch):
         lambda app, user_id: _token_result(),
     )
     monkeypatch.setattr(
-        "app.sentinel.patrol.youtube.fetch_channel_videos",
-        lambda token, max_videos: [
+        "app.sentinel.patrol.youtube.fetch_video_metadata",
+        lambda token, video_ids: [
             {"video_id": "shared-video", "title": "Shared", "comment_count": 1}
         ],
     )
@@ -268,7 +310,7 @@ def test_existing_video_owned_by_other_user_is_not_reassigned(app, monkeypatch):
     with app.app_context():
         video = db.session.get(Video, "shared-video")
         assert video.owner_channel_id == "UC_PATROL_OWNER_B"
-        assert db.session.query(MonitoredVideo).filter_by(user_id=first_user_id).count() == 0
+        assert db.session.query(MonitoredVideo).filter_by(user_id=first_user_id).count() == 1
 
 
 def test_patrol_cycle_skips_when_another_cycle_holds_lock(app):

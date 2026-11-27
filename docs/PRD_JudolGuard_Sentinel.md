@@ -35,7 +35,7 @@ JudolGuard versi web baru bekerja ketika pengguna membuka aplikasi dan memeriksa
 | Patroli | Scheduler, pengecekan `commentCount`, pengambilan komentar baru |
 | Klasifikasi | SVM pada komentar baru, penyimpanan label dan skor |
 | Notifikasi | Pesan ringkasan, tombol tautan ke web, anti-duplikasi |
-| Command | `/start`, `/status`, `/stats`, `/topspammer`, `/pause`, `/resume`, `/putuskan`, `/bantuan` |
+| Command | `/start`, `/status`, `/stats`, `/topspammer`, `/pantau`, `/pantauan`, `/berhentipantau`, `/pause`, `/resume`, `/putuskan`, `/bantuan` |
 | Pengendalian | Penanganan `invalid_grant`, kuota habis, batas laju |
 
 ## 5. Kebutuhan Fungsional
@@ -55,7 +55,7 @@ JudolGuard versi web baru bekerja ketika pengguna membuka aplikasi dan memeriksa
 ### FR-3 Patroli terjadwal
 
 - Scheduler menjalankan siklus pada interval tetap untuk setiap pengguna aktif (terhubung, tidak dijeda, sesi valid).
-- Per siklus: ambil daftar video terbaru (misalnya 5), panggil `videos.list` (`part=statistics`) sekali untuk semua video, lalu bandingkan `commentCount` dengan nilai tersimpan.
+- Per siklus: ambil video yang dipilih pengguna melalui `/pantau`, panggil `videos.list` (`part=statistics`) dalam batch maksimal 50 ID, lalu bandingkan `commentCount` dengan nilai tersimpan.
 - Hanya video yang `commentCount`-nya **berbeda** dari nilai tersimpan yang diambil komentarnya lewat `commentThreads.list` urut terbaru, berhenti begitu bertemu `comment_id` yang sudah ada di database.
 - Siklus pertama sebuah video hanya menyimpan baseline `commentCount`, tanpa mengambil komentar lama.
 - Video yang komentarnya dinonaktifkan dilewati.
@@ -80,6 +80,9 @@ JudolGuard versi web baru bekerja ketika pengguna membuka aplikasi dan memeriksa
 | `/status` | Status patroli (aktif atau jeda), waktu pemeriksaan terakhir, jumlah komentar judol hari ini |
 | `/stats` | Ringkasan per video (judol, perlu review, normal) |
 | `/topspammer` | Akun dengan komentar judol terbanyak (query database, tanpa LLM) |
+| `/pantau` | Menampilkan katalog video dan memilih video untuk dipantau |
+| `/pantauan` | Menampilkan video yang sedang dipantau |
+| `/berhentipantau` | Menampilkan video aktif untuk dihentikan pemantauannya |
 | `/pause` dan `/resume` | Menghentikan atau melanjutkan patroli dan notifikasi tanpa memutus pairing |
 | `/putuskan` | Menghapus pasangan `chat_id` dan `user_id` |
 | `/bantuan` | Daftar command |
@@ -95,7 +98,7 @@ Semua command hanya mengakses data milik `user_id` yang terhubung ke `chat_id` p
 
 - **Keamanan**: refresh token terenkripsi, token pairing sekali pakai dan berumur pendek, token bot dan kunci enkripsi di environment variable, setiap aksi diverifikasi terhadap `chat_id`.
 - **Keandalan**: kegagalan satu pengguna atau satu video tidak menghentikan siklus pengguna lain. Kesalahan jaringan memicu percobaan ulang terbatas.
-- **Efisiensi**: panggilan YouTube API per siklus diminimalkan (satu `videos.list` untuk semua video).
+- **Efisiensi**: panggilan YouTube API per siklus diminimalkan (satu `videos.list` per maksimal 50 video aktif).
 - **Ketersediaan**: proses bot dan scheduler harus selalu aktif di hosting.
 - **Privasi**: pesan Telegram hanya memuat cuplikan komentar secukupnya. Data yang disimpan hanya yang diperlukan.
 
@@ -117,7 +120,7 @@ Tabel komentar ditambah kolom: `label`, `score`, `notified`.
 ## 8. Alur Utama
 
 1. Pengguna login di web, menekan "Hubungkan Telegram", membuka tautan, dan menekan Start (validasi dan penyimpanan pasangan dikerjakan sistem).
-2. Scheduler memicu patroli. Sistem membaca `commentCount` dan mengambil komentar baru hanya untuk video yang berubah.
+2. Pengguna memilih video dari katalog melalui Telegram. Scheduler memicu patroli hanya untuk video aktif pilihan pengguna.
 3. Komentar baru diklasifikasikan, lalu ringkasan dikirim ke Telegram jika ada temuan.
 4. Pengguna menekan **[Tinjau di web]** dan melakukan review serta reject di web.
 
@@ -166,7 +169,8 @@ Urutan pengerjaan disusun agar setiap task bisa diuji sendiri. Task T4 sampai T6
 
 ### T4: Patroli dan pengecekan `commentCount`
 
-- Scheduler per pengguna aktif, pengambilan daftar video terbaru, panggilan `videos.list` (statistics).
+- Command `/pantau` menampilkan katalog video dengan inline keyboard dan menyimpan pilihan ke `monitored_videos.active`.
+- Scheduler per pengguna aktif mengambil video monitoring pilihan pengguna, lalu memanggil `videos.list` (statistics) secara batch.
 - Tabel `monitored_videos`: baseline siklus pertama, perbandingan `commentCount`, simpan nilai terbaru.
 - Pengambilan komentar baru dengan `commentThreads.list` sampai bertemu `comment_id` yang sudah ada, lalu upsert ke database.
 - Lewati video yang komentarnya dinonaktifkan.
@@ -187,7 +191,7 @@ Urutan pengerjaan disusun agar setiap task bisa diuji sendiri. Task T4 sampai T6
 
 ### T7: Command pemantauan
 
-- `/status`, `/stats`, `/topspammer`, `/pause`, `/resume`, `/putuskan`, `/bantuan`.
+- `/status`, `/stats`, `/topspammer`, `/pantau`, `/pantauan`, `/berhentipantau`, `/pause`, `/resume`, `/putuskan`, `/bantuan`.
 - Semua query difilter berdasarkan `user_id` dari `chat_id`.
 - **Selesai jika**: setiap command menghasilkan jawaban yang benar untuk akun sendiri, dan `/pause` benar-benar menghentikan notifikasi.
 

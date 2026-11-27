@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 
 from app.extensions import db
 from app.models import ChatLog, ChatSession, Comment, Keyword, Video
-from app.services.chatbot_tools import count_judol, top_spammers
+from app.services.chatbot_tools import compare_videos, count_judol, top_spammers
 from app.services.llm import LLMChatUnavailable
 from app.services.session_store import session_store
 
@@ -79,12 +79,17 @@ def test_chatbot_tools_filter_owner_and_return_aggregates(app):
     with app.app_context():
         spammers = top_spammers("UC_CHAT_OWNER", video_id="chat-video")
         counts = count_judol("UC_CHAT_OWNER", video_id="chat-video")
+        comparison = compare_videos("UC_CHAT_OWNER")
 
     assert spammers["items"][0]["author_channel_id"] == "UC_SPAMMER"
     assert spammers["items"][0]["comment_count"] == 2
     assert counts["classified_comments"] == 3
     assert counts["judol_comments"] == 2
     assert counts["judol_percentage"] == 66.67
+    assert comparison["items"][0]["title"] == "Video Chat"
+    assert comparison["items"][0]["judol_count"] == 2
+    assert comparison["items"][0]["monitoring_active"] is False
+    assert comparison["items"][0]["last_checked_at"] is None
     with app.app_context():
         assert top_spammers("UC_OTHER_OWNER")["total"] == 0
 
